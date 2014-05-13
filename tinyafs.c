@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -185,5 +187,65 @@ int get_acl(const char *fname, struct Acl *acl) {
 	parse_acl(space, acl);
 err:
 	free(space);
+	return code;
+}
+
+
+static void get_parent(const char *path, char **parent, char **name) {
+	const char *last_slash;
+
+	last_slash = strrchr(path, '/');
+	if (last_slash == path) {
+		/* parent is the root directory */
+		*parent = strdup("/");
+		*name = strdup(last_slash + 1);
+	} else if (last_slash) {
+		/* found both components */
+		*parent = strndup(path, last_slash - path);
+		*name = strdup(last_slash + 1);
+	} else {
+		/* no slash, the parent is the current directory */
+		*parent = strdup(".");
+		*name = strdup(path);
+	}
+}
+
+
+int list_mount(const char *path, char **mount) {
+	struct ViceIoctl blob;
+	struct stat info;
+	char *space = NULL, *parent = NULL, *name = NULL;
+	int code;
+
+	*mount = NULL;
+
+	/* lstat() may fail, but pioctl() can be still successfull */
+	if (lstat(path, &info) == 0) {
+		/* we won't support symlinks (requires translation of relative links, ...) */
+		if (S_ISLNK(info.st_mode)) { errno = EINVAL; return EINVAL; }
+		if (!S_ISDIR(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
+	}
+
+	get_parent(path, &parent, &name);
+	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+		errno = code = EINVAL;
+		goto err;
+	}
+
+	space = calloc(1, AFS_PIOCTL_MAXSIZE);
+	blob.in = name;
+	blob.in_size = strlen(name) + 1;
+	blob.out_size = AFS_PIOCTL_MAXSIZE;
+	blob.out = space;
+
+	code = pioctl(parent, VIOC_AFS_STAT_MT_PT, &blob, 1);
+	if (code == 0) {
+		*mount = space;
+		space = NULL;
+	}
+err:
+	free(space);
+	free(parent);
+	free(name);
 	return code;
 }

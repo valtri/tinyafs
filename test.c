@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,7 +7,7 @@
 
 
 int main(int argn, char *argc[]) {
-	char *cell;
+	char *cell, *mount;
 	struct Acl acl;
 	const char *path = "/afs/zcu.cz";
 
@@ -31,6 +32,14 @@ int main(int argn, char *argc[]) {
 		printf("acl: ");
 		dump_acl(&acl);
 		free_acl(&acl);
+	}
+
+	if (list_mount(path, &mount) == 0) {
+		printf("mount: %s\n", mount);
+		free(mount);
+	} else {
+		if (errno == EINVAL) printf("mount: (not a mountpoint)\n");
+		else perror("mount");
 	}
 
 	return 0;

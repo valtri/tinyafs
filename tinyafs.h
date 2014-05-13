@@ -29,5 +29,6 @@ void dump_acl(const struct Acl *acl);
 int has_afs();
 int get_cell(const char *fname, char **cellname);
 int get_acl(const char *fname, struct Acl *acl);
+int list_mount(const char *path, char **mount);
 
 #endif
