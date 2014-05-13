@@ -12,7 +12,7 @@ test: tinyafs.o test.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
 
 clean:
-	rm -v *.o test
+	rm -fv *.o test
 
 test: tinyafs.h
 tinyafs.o: tinyafs.h
