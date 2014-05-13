@@ -132,9 +132,9 @@ static int parse_acl(const char *s, struct Acl *acl) {
 
 	memset(acl, 0, sizeof(struct Acl));
 	p = s;
-	sscanf(p, "%lu dfs:%d %1024s", &acl->nplus, &dfs, buf /* cell */);
+	sscanf(p, "%zu dfs:%d %1024s", &acl->nplus, &dfs, buf /* cell */);
 	p = nextline(p);
-	sscanf(p, "%lu", &acl->nminus);
+	sscanf(p, "%zu", &acl->nminus);
 	p = nextline(p);
 
 	if (acl->nplus) acl->plus = calloc(acl->nplus, sizeof(struct AclEntry));
