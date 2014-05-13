@@ -76,6 +76,7 @@ int browse(const char *path, browse_action_f *action_cb) {
 	node->path = strdup(path);
 	if ((node->dir = opendir(path)) == NULL) {
 		log_errno("can't open directory '%s'", path);
+		err = 1;
 		browse_node_free(node);
 		return 1;
 	}
@@ -103,6 +104,7 @@ int browse(const char *path, browse_action_f *action_cb) {
 				node->path = subpath;
 				if ((node->dir = opendir(node->path)) == NULL) {
 					log_errno("can't open directory '%s'", node->path);
+					err = 1;
 					break;
 				}
 			} else {

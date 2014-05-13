@@ -36,7 +36,5 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	browse(argv[1], action);
-
-	return 0;
+	return browse(argv[1], action);
 }

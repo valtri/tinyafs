@@ -18,7 +18,5 @@ int main(int argn, char *argv[]) {
 		return 1;
 	}
 
-	browse(argv[1], action);
-
-	return 0;
+	return browse(argv[1], action);
 }
