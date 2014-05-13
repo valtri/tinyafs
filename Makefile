@@ -9,9 +9,12 @@ CC=gcc
 CPPFLAGS?=$(AFS_CPPFLAGS)
 CFLAGS?=-W -Wall -g -O0
 
-BINS=test_browse test_tinyafs
+BINS=scan test_browse test_tinyafs
 
 all: $(BINS)
+
+scan: scan.o browse.o list.o tinyafs.o
+	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
 
 test_browse: test_browse.o browse.o list.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
@@ -24,6 +27,7 @@ clean:
 
 browse.o: list.h
 list.o: list.h
+scan.o: browse.h tinyafs.h
 test_browse.o: browse.h
 test_tinyafs.o: tinyafs.h
 tinyafs.o: tinyafs.h
