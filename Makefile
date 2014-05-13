@@ -1,5 +1,5 @@
-AFS_PREFIX=/usr/local
-AFS_CPPFLAGS=-I$(AFS_PREFIX)/include
+AFS_PREFIX=/usr
+AFS_CPPFLAGS=-I$(AFS_PREFIX)/include -DVENUS=1
 AFS_LIBS=-L$(AFS_PREFIX)/lib/afs -lsys
 
 CC=gcc

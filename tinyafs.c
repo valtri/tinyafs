@@ -5,19 +5,34 @@
 #include <string.h>
 
 #include <afs/afssyscalls.h>
+#ifdef VENUS
+#include <netinet/in.h>
+#include <afs/venus.h>
+#else
 #include <afs/afs_consts.h>
 #include <afs/vioc.h>
+#endif
 #include <afs/prs_fs.h>
 #include "tinyafs.h"
 
 
 #define MAX_CELLNAME 512
+#ifndef AFS_PIOCTL_MAXSIZE
+#define AFS_PIOCTL_MAXSIZE 2048
+#endif
+
+
+static int pioctl(const char *path, afs_int32 cmd, struct ViceIoctl *data, afs_int32 follow) {
+	/* XXX: proper way would be to use strdup() on the path */
+	return lpioctl((char *)path, cmd, (char *)data, follow);
+}
+
 
 int has_afs() {
 	struct ViceIoctl iob;
 
 	memset(&iob, 0, sizeof iob);
-	lpioctl(NULL, VIOCSETTOK, &iob, 0);
+	pioctl(NULL, VIOCSETTOK, &iob, 0);
 
 	return errno == EINVAL;
 }
@@ -33,7 +48,7 @@ int get_cell(const char *fname, char **cellname) {
 	blob.out = buf;
 
 	memset(buf, 0, sizeof(buf));
-	code = lpioctl(fname, VIOC_FILE_CELL_NAME, &blob, 1);
+	code = pioctl(fname, VIOC_FILE_CELL_NAME, &blob, 1);
 
 	if (code  == 0 ) {
 		*cellname = strdup(buf);
@@ -154,7 +169,7 @@ int get_acl(const char *fname, struct Acl *acl) {
 	blob.out_size = AFS_PIOCTL_MAXSIZE;
 	blob.in_size = idf;
 	blob.in = blob.out = space;
-	code = lpioctl(fname, VIOCGETAL, &blob, 1);
+	code = pioctl(fname, VIOCGETAL, &blob, 1);
 	if (code) goto err;
 
 	parse_acl(space, acl);
