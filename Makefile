@@ -1,18 +1,29 @@
-AFS_PREFIX=/usr
-AFS_CPPFLAGS=-I$(AFS_PREFIX)/include -DVENUS=1
-AFS_LIBS=-L$(AFS_PREFIX)/lib/afs -lsys
+-include Makefile.inc
+
+libdir?=lib
+AFS_PREFIX?=/usr
+AFS_CPPFLAGS?=-I$(AFS_PREFIX)/include -DVENUS=1
+AFS_LIBS?=-L$(AFS_PREFIX)/$(libdir)/afs -lsys
 
 CC=gcc
-CPPFLAGS=$(AFS_CPPFLAGS)
-CFLAGS=-W -Wall -g -O0
+CPPFLAGS?=$(AFS_CPPFLAGS)
+CFLAGS?=-W -Wall -g -O0
 
-all: test
+BINS=test_browse test_tinyafs
 
-test: tinyafs.o test.o
+all: $(BINS)
+
+test_browse: test_browse.o browse.o list.o
+	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
+
+test_tinyafs: tinyafs.o test_tinyafs.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
 
 clean:
-	rm -fv *.o test
+	rm -fv *.o $(BINS)
 
-test: tinyafs.h
+browse.o: list.h
+list.o: list.h
+test_browse.o: browse.h
+test_tinyafs.o: tinyafs.h
 tinyafs.o: tinyafs.h
