@@ -20,12 +20,14 @@ struct AclEntry {
 };
 
 
-int has_afs();
-int get_cell(const char *fname, char **cellname);
+void rights2str(int rights, char *s);
 
+void init_acl(struct Acl *acl, size_t nplus, size_t nminus);
 void free_acl(struct Acl *acl);
 void dump_acl(const struct Acl *acl);
-void rights2str(int rights, char *s);
+
+int has_afs();
+int get_cell(const char *fname, char **cellname);
 int get_acl(const char *fname, struct Acl *acl);
 
 #endif

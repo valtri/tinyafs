@@ -28,6 +28,74 @@ static int pioctl(const char *path, afs_int32 cmd, struct ViceIoctl *data, afs_i
 }
 
 
+void rights2str(int rights, char *s) {
+	char *p;
+
+	p = s;
+
+	if (rights & PRSFS_READ) (p++)[0] = 'r';
+	if (rights & PRSFS_LOOKUP) (p++)[0] = 'l';
+	if (rights & PRSFS_INSERT) (p++)[0] = 'i';
+	if (rights & PRSFS_DELETE) (p++)[0] = 'd';
+	if (rights & PRSFS_WRITE) (p++)[0] = 'w';
+	if (rights & PRSFS_LOCK) (p++)[0] = 'k';
+	if (rights & PRSFS_ADMINISTER) (p++)[0] = 'a';
+	if (rights & PRSFS_USR0) (p++)[0] = 'A';
+	if (rights & PRSFS_USR1) (p++)[0] = 'B';
+	if (rights & PRSFS_USR2) (p++)[0] = 'C';
+	if (rights & PRSFS_USR3) (p++)[0] = 'D';
+	if (rights & PRSFS_USR4) (p++)[0] = 'E';
+	if (rights & PRSFS_USR5) (p++)[0] = 'F';
+	if (rights & PRSFS_USR6) (p++)[0] = 'G';
+	if (rights & PRSFS_USR7) (p++)[0] = 'H';
+	p[0] = '\0';
+}
+
+
+void init_acl(struct Acl *acl, size_t nplus, size_t nminus) {
+	memset(acl, 0, sizeof(struct Acl));
+	if (nplus) {
+		acl->plus = calloc(nplus, sizeof(struct AclEntry));
+		acl->nplus = nplus;
+	}
+	if (nminus) {
+		acl->minus = calloc(nminus, sizeof(struct AclEntry));
+		acl->nminus = nminus;
+	}
+}
+
+
+void free_acl(struct Acl *acl) {
+	free(acl->plus);
+	free(acl->minus);
+	memset(acl, 0, sizeof(struct Acl));
+}
+
+
+void dump_acl(const struct Acl *acl) {
+	size_t i;
+	struct AclEntry *entry;
+	char rights[MAXRIGHTS];
+
+	if (acl->nplus) {
+		printf("Rights:\n");
+		for (i = 0; i < acl->nplus; i++) {
+			entry = acl->plus + i;
+			rights2str(entry->rights, rights);
+			printf("  %-8s %s\n", rights, entry->name);
+		}
+	}
+	if (acl->nminus) {
+		printf("Negative rights:\n");
+		for (i = 0; i < acl->nminus; i++) {
+			entry = acl->minus + i;
+			rights2str(entry->rights, rights);
+			printf("  %-8s %s\n", rights, entry->name);
+		}
+	}
+}
+
+
 int has_afs() {
 	struct ViceIoctl iob;
 
@@ -60,61 +128,6 @@ int get_cell(const char *fname, char **cellname) {
 }
 
 
-void free_acl(struct Acl *acl) {
-	free(acl->plus);
-	free(acl->minus);
-	memset(acl, 0, sizeof(struct Acl));
-}
-
-
-void rights2str(int rights, char *s) {
-	char *p;
-
-	p = s;
-
-	if (rights & PRSFS_READ) (p++)[0] = 'r';
-	if (rights & PRSFS_LOOKUP) (p++)[0] = 'l';
-	if (rights & PRSFS_INSERT) (p++)[0] = 'i';
-	if (rights & PRSFS_DELETE) (p++)[0] = 'd';
-	if (rights & PRSFS_WRITE) (p++)[0] = 'w';
-	if (rights & PRSFS_LOCK) (p++)[0] = 'k';
-	if (rights & PRSFS_ADMINISTER) (p++)[0] = 'a';
-	if (rights & PRSFS_USR0) (p++)[0] = 'A';
-	if (rights & PRSFS_USR1) (p++)[0] = 'B';
-	if (rights & PRSFS_USR2) (p++)[0] = 'C';
-	if (rights & PRSFS_USR3) (p++)[0] = 'D';
-	if (rights & PRSFS_USR4) (p++)[0] = 'E';
-	if (rights & PRSFS_USR5) (p++)[0] = 'F';
-	if (rights & PRSFS_USR6) (p++)[0] = 'G';
-	if (rights & PRSFS_USR7) (p++)[0] = 'H';
-	p[0] = '\0';
-}
-
-
-void dump_acl(const struct Acl *acl) {
-	size_t i;
-	struct AclEntry *entry;
-	char rights[MAXRIGHTS];
-
-	if (acl->nplus) {
-		printf("Rights:\n");
-		for (i = 0; i < acl->nplus; i++) {
-			entry = acl->plus + i;
-			rights2str(entry->rights, rights);
-			printf("  %-8s %s\n", rights, entry->name);
-		}
-	}
-	if (acl->nminus) {
-		printf("Negative rights:\n");
-		for (i = 0; i < acl->nminus; i++) {
-			entry = acl->minus + i;
-			rights2str(entry->rights, rights);
-			printf("  %-8s %s\n", rights, entry->name);
-		}
-	}
-}
-
-
 static const char* nextline(const char *s) {
 	while (*s && *s != '\n') s++;
 	if (*s) s++;
@@ -130,14 +143,13 @@ static int parse_acl(const char *s, struct Acl *acl) {
 	const char *p;
 	size_t i;
 
-	memset(acl, 0, sizeof(struct Acl));
 	p = s;
 	sscanf(p, "%zu dfs:%d %1024s", &acl->nplus, &dfs, buf /* cell */);
 	p = nextline(p);
 	sscanf(p, "%zu", &acl->nminus);
 	p = nextline(p);
 
-	if (acl->nplus) acl->plus = calloc(acl->nplus, sizeof(struct AclEntry));
+	init_acl(acl, acl->nplus, acl->nminus);
 	for (i = 0; i < acl->nplus; i++) {
 		entry = acl->plus + i;
 		entry->name[0] = '\0';
@@ -145,8 +157,6 @@ static int parse_acl(const char *s, struct Acl *acl) {
 		sscanf(p, "%99s %d", entry->name, &entry->rights);
 		p = nextline(p);
 	}
-
-	if (acl->nminus) acl->minus = calloc(acl->nminus, sizeof(struct AclEntry));
 	for (i = 0; i < acl->nminus; i++) {
 		entry = acl->minus + i;
 		entry->name[0] = '\0';
