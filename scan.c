@@ -19,6 +19,11 @@
 
 #define DEFAULT_DBCS DEFAULT_DBNAME "/" DEFAULT_DBPASS "@" DEFAULT_DBHOST ":" DEFAULT_DBNAME
 
+#define EXIT_OK 0
+#define EXIT_ERRORS 1
+#define EXIT_FATAL 2
+
+
 char *program_name = NULL;
 
 char *dbcs = NULL;
@@ -173,7 +178,7 @@ static int action(const char *path, int level, void *data __attribute__((unused)
 
 	if (level >= 200) {
 		fprintf(stderr, "level too high, skipping: %s\n", path);
-		return 1;
+		return BROWSE_ACTION_SKIP;
 	}
 
 	if (strncmp(path, basedir, basedir_len) == 0) relpath = path + basedir_len;
@@ -185,7 +190,7 @@ static int action(const char *path, int level, void *data __attribute__((unused)
 		if (level != 0) {
 			save_point(points_stmt, volume, relpath, mount);
 			free(mount);
-			return 1;
+			return BROWSE_ACTION_SKIP;
 		} else {
 			free(mount);
 		}
@@ -197,18 +202,18 @@ static int action(const char *path, int level, void *data __attribute__((unused)
 	if (get_acl(path, &acl) != 0) {
 		fprintf(stderr, "error getting ACLs for '%s': %s\n", path, strerror(errno));
 		err = 1;
-		return 0;
+		return BROWSE_ACTION_OK;
 	}
 	for (i = 0; i < acl.nplus; i++) save_rights(rights_stmt, volume, relpath, acl.plus + i, 0);
 	for (i = 0; i < acl.nminus; i++) save_rights(rights_stmt, volume, relpath, acl.minus + i, 1);
 	free_acl(&acl);
 
-	return 0;
+	return BROWSE_ACTION_OK;
 }
 
 
 int main(int argc, char *argv[]) {
-	int retval = 2;
+	int retval = EXIT_FATAL;
 	int arg;
 
 	program_name = strrchr(argv[0], '/');
@@ -219,16 +224,16 @@ int main(int argc, char *argv[]) {
 		switch (arg) {
 		case 'h':
 			usage();
-			return 0;
+			return EXIT_OK;
 			break;
 		case 'c':
-			if (read_config(optarg) != 0) return 2;
+			if (read_config(optarg) != 0) return EXIT_FATAL;
 			break;
 		}
 	}
 	if (optind + 2 != argc) {
 		usage();
-		return 2;
+		return EXIT_FATAL;
 	}
 	volume = argv[optind++];
 	basedir = argv[optind++];
@@ -237,21 +242,21 @@ int main(int argc, char *argv[]) {
 
 	if (!has_afs()) {
 		fprintf(stderr, "has_afs() failed\n");
-		return 2;
+		return EXIT_FATAL;
 	}
 
 	glite_common_log_init();
 	if (glite_lbu_InitDBContext(&db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
 		fprintf(stderr, "DB module initialization failed\n\n");
-		return 2;
+		return EXIT_FATAL;
 	}
 
 	if (glite_lbu_DBConnect(db, dbcs) != 0) goto dberr;
 	if (glite_lbu_PrepareStmt(db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &points_stmt) != 0) goto dberr;
 	if (glite_lbu_PrepareStmt(db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &rights_stmt) != 0) goto dberr;
 
-	retval = browse(basedir, action, NULL);
-	if (err) retval = 2;
+	if (browse(basedir, action, NULL) == BROWSE_ACTION_ABORT) retval = EXIT_FATAL;
+	if (err) retval = EXIT_ERRORS;
 
 	glite_lbu_FreeStmt(&points_stmt);
 	glite_lbu_FreeStmt(&rights_stmt);
