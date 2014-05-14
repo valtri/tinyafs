@@ -12,7 +12,7 @@ CC=gcc
 CPPFLAGS?=-D_GNU_SOURCE $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
 CFLAGS?=-W -Wall -g -O0
 
-BINS=scan test_browse test_tinyafs
+BINS=scan test_browse test_rmmount test_tinyafs
 
 all: $(BINS)
 
@@ -20,6 +20,9 @@ scan: scan.o browse.o list.o tinyafs.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS) $(LBU_LIBS)
 
 test_browse: test_browse.o browse.o list.o
+	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
+
+test_rmmount: test_rmmount.o tinyafs.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
 
 test_tinyafs: tinyafs.o test_tinyafs.o

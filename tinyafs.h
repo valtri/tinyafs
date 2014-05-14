@@ -30,5 +30,7 @@ int has_afs();
 int get_cell(const char *fname, char **cellname);
 int get_acl(const char *fname, struct Acl *acl);
 int list_mount(const char *path, char **mount);
+int remove_mount(const char *path);
+int make_mount(const char *path, const char *volume, int rw, const char *cell);
 
 #endif

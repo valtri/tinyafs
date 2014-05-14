@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <afs/afssyscalls.h>
 #ifdef VENUS
@@ -222,7 +223,7 @@ int list_mount(const char *path, char **mount) {
 	/* lstat() may fail, but pioctl() can be still successfull */
 	if (lstat(path, &info) == 0) {
 		/* we won't support symlinks (requires translation of relative links, ...) */
-		if (S_ISLNK(info.st_mode)) { errno = EINVAL; return EINVAL; }
+		if (S_ISLNK(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
 		if (!S_ISDIR(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
 	}
 
@@ -248,4 +249,49 @@ err:
 	free(parent);
 	free(name);
 	return code;
+}
+
+
+int remove_mount(const char *path) {
+	struct ViceIoctl blob;
+	struct stat info;
+	char *parent = NULL, *name = NULL;
+	int code;
+
+	/* lstat() may fail, but pioctl() can be still successfull */
+	if (lstat(path, &info) == 0) {
+		/* we won't support symlinks (requires translation of relative links, ...) */
+		if (S_ISLNK(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
+		if (!S_ISDIR(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
+	}
+
+	get_parent(path, &parent, &name);
+	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+		errno = code = EINVAL;
+		goto err;
+	}
+
+	blob.out_size = 0;
+	blob.in = name;
+	blob.in_size = strlen(name) + 1;
+	code = pioctl(parent, VIOC_AFS_DELETE_MT_PT, &blob, 1);
+err:
+	free(parent);
+	free(name);
+	return code;
+}
+
+
+int make_mount(const char *path, const char *volume, int rw, const char *cell) {
+	char space[512];
+
+	if (rw) strcpy(space, "%");
+	else strcpy(space, "#");
+	if (cell) {
+		strncat(space, cell, sizeof space);
+	}
+	strncat(space, volume, sizeof space);
+	strncat(space, ".", sizeof space);
+
+	return symlink(space, path);
 }
