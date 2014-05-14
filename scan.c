@@ -1,19 +1,26 @@
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <glite/lbu/db.h>
+#include <glite/lbu/log.h>
 
 #include "browse.h"
 #include "tinyafs.h"
 
 
+#define DEFAULT_DBHOST "localhost"
+#define DEFAULT_DBNAME "afs"
+#define DEFAULT_DBUSER "afs"
+#define DEFAULT_DBPASS ""
 
-char *dbhost = "localhost";
-char *dbname = "afs";
-char *dbuser = "afs";
-char *pass = "";
+#define DEFAULT_DBCS DEFAULT_DBNAME "/" DEFAULT_DBPASS "@" DEFAULT_DBHOST ":" DEFAULT_DBNAME
+
+char *program_name = NULL;
+
 char *dbcs = NULL;
 
 char *basedir = NULL;
@@ -22,6 +29,97 @@ char *volume = NULL;
 glite_lbu_DBContext db;
 glite_lbu_Statement points_stmt, rights_stmt;
 int err = 0;
+
+
+const char *optstring = "hc:";
+
+const struct option longopts[] = {
+	{ "help", no_argument, NULL, 'h' },
+	{ "config", required_argument, NULL, 'c' },
+	{ NULL, 0, NULL, 0 }
+};
+
+
+static void usage() {
+	printf("%s [OPTIONS] VOLUME DIRECTORY\n\
+OPTIONS are:\n\
+  -h, --help .......... help message\n\
+  -c, --config=FILE ... config file\n\
+", program_name);
+}
+
+
+static void split_key_value(char *buf, char **result_key, char **result_value) {
+	char *delim, *key, *value;
+	size_t i;
+
+	delim = strchr(buf, '=');
+	if (delim) delim[0] = 0;
+
+	key = buf;
+	if (key) key += strspn(buf, " \t");
+
+	value = delim ? delim + 1 : NULL;
+	if (value) {
+		i = strlen(value);
+		while (i > 0 && (value[i - 1] == '\n' || value[i - 1] == '\r')) i--;
+		value[i] = 0;
+	}
+
+	*result_key = key;
+	*result_value = value;
+}
+
+
+static int read_config(const char *config_file) {
+	char buf[1024];
+	FILE *f;
+	char *host = NULL;
+	char *name = NULL;
+	char *user = NULL;
+	char *password = NULL;
+	char *key, *value;
+	int retval = -1;
+
+	if ((f = fopen(config_file, "r")) == NULL) {
+		fprintf(stderr, "Can't read config file '%s': %s\n", config_file, strerror(errno));
+		return -1;
+	}
+
+	while (fgets(buf, sizeof buf, f) != NULL) {
+		split_key_value(buf, &key, &value);
+		if ((strcmp(key, "host") == 0)) {
+			free(host);
+			host = value ? strdup(value) : NULL;
+		} else if ((strcmp(buf, "name") == 0)) {
+			free(name);
+			name = value ? strdup(value) : NULL;
+		} if ((strcmp(buf, "user") == 0)) {
+			free(user);
+			user = value ? strdup(value) : NULL;
+		} if ((strcmp(buf, "password") == 0)) {
+			free(password);
+			password = value ? strdup(value) : NULL;
+		}
+	}
+	if (ferror(f)) {
+		fprintf(stderr, "Error reading config file '%s': %s\n", config_file, strerror(errno));
+		fclose(f);
+		goto err;
+	}
+
+	fclose(f);
+
+	asprintf(&dbcs, "%s/%s@%s:%s", user ? : DEFAULT_DBUSER, password ? : DEFAULT_DBPASS, host ? : DEFAULT_DBHOST, name ? : DEFAULT_DBNAME);
+
+	retval = 0;
+err:
+	free(host);
+	free(name);
+	free(user);
+	free(password);
+	return retval;
+}
 
 
 static void print_DBError(glite_lbu_DBContext db) {
@@ -103,6 +201,7 @@ static int action(const char *path, int level, void *data __attribute__((unused)
 	}
 	for (i = 0; i < acl.nplus; i++) save_rights(rights_stmt, volume, relpath, acl.plus + i, 0);
 	for (i = 0; i < acl.nminus; i++) save_rights(rights_stmt, volume, relpath, acl.minus + i, 1);
+	free_acl(&acl);
 
 	return 0;
 }
@@ -110,21 +209,38 @@ static int action(const char *path, int level, void *data __attribute__((unused)
 
 int main(int argc, char *argv[]) {
 	int retval = 2;
+	int arg;
 
-	if (argc <= 2) {
-		printf("Usage: %s VOLUME DIRECTORY\n", argv[0]);
-		return 1;
+	program_name = strrchr(argv[0], '/');
+	if (program_name) program_name++;
+	else program_name = argv[0];
+
+	while ((arg = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
+		switch (arg) {
+		case 'h':
+			usage();
+			return 0;
+			break;
+		case 'c':
+			if (read_config(optarg) != 0) return 2;
+			break;
+		}
 	}
-	volume = argv[1];
-	basedir = argv[2];
-	basedir_len = strlen(argv[2]);
+	if (optind + 2 != argc) {
+		usage();
+		return 2;
+	}
+	volume = argv[optind++];
+	basedir = argv[optind++];
+	basedir_len = strlen(basedir);
+	if (!dbcs) dbcs = strdup(DEFAULT_DBCS);
 
 	if (!has_afs()) {
 		fprintf(stderr, "has_afs() failed\n");
 		return 2;
 	}
 
-	asprintf(&dbcs, "%s/%s@%s:%s", dbuser, pass, dbhost, dbname);
+	glite_common_log_init();
 	if (glite_lbu_InitDBContext(&db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
 		fprintf(stderr, "DB module initialization failed\n\n");
 		return 2;
@@ -144,6 +260,7 @@ int main(int argc, char *argv[]) {
 err:
 	free(dbcs);
 	glite_lbu_FreeDBContext(db);
+	glite_common_log_fini();
 
 	return retval;
 dberr:

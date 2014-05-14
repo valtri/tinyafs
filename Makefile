@@ -6,7 +6,7 @@ AFS_CPPFLAGS?=-I$(AFS_PREFIX)/include -DVENUS=1
 AFS_LIBS?=-L$(AFS_PREFIX)/$(libdir)/afs -lsys
 
 LBU_CPPFLAGS=
-LBU_LIBS=-lglite_lbu_db
+LBU_LIBS=-lglite_lbu_db -lglite_lbu_log
 
 CC=gcc
 CPPFLAGS?=-D_GNU_SOURCE $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
