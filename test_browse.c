@@ -3,7 +3,7 @@
 #include "browse.h"
 
 
-int action(const char *path, int level) {
+int action(const char *path, int level, void *user __attribute__((unused))) {
 	printf("%d: %s\n", level, path);
 
 	if (level >= 2) return 1;
@@ -18,5 +18,5 @@ int main(int argn, char *argv[]) {
 		return 1;
 	}
 
-	return browse(argv[1], action);
+	return browse(argv[1], action, NULL);
 }

@@ -9,16 +9,17 @@
  * Callback function for directories.
  * \ret BROWSE_ACTION_OK use directory, BROWSE_ACTION_SKIP don't browse this directory, BROWSE_ACTION_ABORT abort the whole process
  */
-typedef int (browse_action_f)(const char *path, int level);
+typedef int (browse_action_f)(const char *path, int level, void *data);
 
 /**
  * Browse directory tree.
  *
  * path: starting path
  * action_cn: callback per each directory
+ * data: user data to pass to callback
  *
  * \ret 0 OK, 1 some errors, 2 aborted by callback, 3 errors and aborted by callback
  */
-int browse(const char *path, browse_action_f *action_cb);
+int browse(const char *path, browse_action_f *action_cb, void *data);
 
 #endif

@@ -67,7 +67,7 @@ static void save_point(glite_lbu_Statement stmt, const char *volume, const char 
 }
 
 
-static int action(const char *path, int level) {
+static int action(const char *path, int level, void *data __attribute__((unused))) {
 	char *mount;
 	const char *relpath;
 	struct Acl acl;
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
 	if (glite_lbu_PrepareStmt(db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &points_stmt) != 0) goto dberr;
 	if (glite_lbu_PrepareStmt(db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &rights_stmt) != 0) goto dberr;
 
-	retval = browse(basedir, action);
+	retval = browse(basedir, action, NULL);
 	if (err) retval = 2;
 
 	glite_lbu_FreeStmt(&points_stmt);

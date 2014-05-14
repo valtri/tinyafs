@@ -56,7 +56,7 @@ static void path_concat(char **path, const char *parent, const char *name) {
 }
 
 
-int browse(const char *path, browse_action_f *action_cb) {
+int browse(const char *path, browse_action_f *action_cb, void *data) {
 	list_t stack;
 	browse_node_t *node;
 	int level = 0;
@@ -64,7 +64,7 @@ int browse(const char *path, browse_action_f *action_cb) {
 	int retval, err = 0;
 	char *subpath;
 
-	switch (retval = action_cb(path, level)) {
+	switch (retval = action_cb(path, level, data)) {
 	case BROWSE_ACTION_OK: break;
 	case BROWSE_ACTION_SKIP: return 0;
 	default: return 2;
@@ -95,7 +95,7 @@ int browse(const char *path, browse_action_f *action_cb) {
 
 			path_concat(&subpath, node->path, entry.d_name);
 
-			if (entry.d_type == DT_DIR && strcmp(entry.d_name, ".") != 0 && strcmp(entry.d_name, "..") && (retval = action_cb(subpath, level)) == BROWSE_ACTION_OK) {
+			if (entry.d_type == DT_DIR && strcmp(entry.d_name, ".") != 0 && strcmp(entry.d_name, "..") && (retval = action_cb(subpath, level, data)) == BROWSE_ACTION_OK) {
 			/* yes, continue to go down */
 				list_push(&stack, (list_node_t *)node);
 				level++;
