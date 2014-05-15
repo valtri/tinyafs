@@ -6,15 +6,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "array.h"
 #include "browse.h"
-#include "list.h"
 
 
 #define log_errno(MSG, ARGS...) log_errno_raw(__LINE__, ((MSG)), ##ARGS)
 
 
 typedef struct {
-	list_node_t node;
 	char *path;
 	DIR *dir;
 } browse_node_t;
@@ -34,10 +33,8 @@ static void log_errno_raw(int line, const char *msg, ...) {
 
 
 static void browse_node_free(browse_node_t *node) {
-	if (node) {
+	if (node)
 		free(node->path);
-		free(node);
-	}
 }
 
 
@@ -57,7 +54,7 @@ static void path_concat(char **path, const char *parent, const char *name) {
 
 
 int browse(const char *path, browse_action_f *action_cb, void *data) {
-	list_t stack;
+	array_t stack;
 	browse_node_t *node;
 	int level = 0;
 	struct dirent entry, *entry_r;
@@ -70,9 +67,9 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 	default: return 2;
 	}
 
-	list_init(&stack);
+	array_init(&stack, sizeof(browse_node_t));
 
-	node = calloc(1, sizeof(browse_node_t));
+	node = array_push(&stack);
 	node->path = strdup(path);
 	if ((node->dir = opendir(path)) == NULL) {
 		log_errno("can't open directory '%s'", path);
@@ -97,10 +94,9 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 
 			if (entry.d_type == DT_DIR && strcmp(entry.d_name, ".") != 0 && strcmp(entry.d_name, "..") && (retval = action_cb(subpath, level, data)) == BROWSE_ACTION_OK) {
 			/* yes, continue to go down */
-				list_push(&stack, (list_node_t *)node);
 				level++;
 
-				node = calloc(1, sizeof(browse_node_t));
+				node = array_push(&stack);
 				node->path = subpath;
 				if ((node->dir = opendir(node->path)) == NULL) {
 					log_errno("can't open directory '%s'", node->path);
@@ -116,9 +112,11 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 		/* node processed, go up */
 		if (node->dir) closedir(node->dir);
 		browse_node_free(node);
-		node = (browse_node_t *)list_pop(&stack);
+		node = (browse_node_t *)array_pop(&stack);
 		level--;
 	}
+
+	array_destroy(&stack);
 
 	if (retval == BROWSE_ACTION_ABORT) err |= 2;
 	return err;

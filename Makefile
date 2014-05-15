@@ -16,10 +16,10 @@ BINS=scan test_browse test_rmmount test_tinyafs
 
 all: $(BINS)
 
-scan: scan.o browse.o list.o tinyafs.o
+scan: scan.o browse.o array.o tinyafs.o
 	$(CC) $(LDFLAGS) -pthread $+ -o $@ $(AFS_LIBS) $(LBU_LIBS)
 
-test_browse: test_browse.o browse.o list.o
+test_browse: test_browse.o browse.o array.o
 	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
 
 test_rmmount: test_rmmount.o tinyafs.o
@@ -31,8 +31,7 @@ test_tinyafs: tinyafs.o test_tinyafs.o
 clean:
 	rm -fv *.o $(BINS)
 
-browse.o: list.h
-list.o: list.h
+array.o: array.h
 scan.o: browse.h tinyafs.h
 test_browse.o: browse.h
 test_tinyafs.o: tinyafs.h
