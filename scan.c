@@ -1,6 +1,7 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <getopt.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,8 +31,12 @@
 
 
 typedef struct {
+	int id;
+	pthread_t thread;
+
 	char *basedir; /* start directory */
 	char *volume;  /* name of volume */
+	char *mountpoint; /* mountpoint if mounted by scanner */
 
 	size_t basedir_len;
 	glite_lbu_DBContext db;
@@ -43,33 +48,46 @@ typedef struct {
 } ctx_t;
 
 
+typedef struct {
+	char *volume;
+	char *mountpoint;
+} volume_t;
 
+
+pthread_mutex_t lock;
 char *program_name = NULL;
 char *dbcs = NULL;
+char *servicedir = NULL;
+size_t nthreads = 1;
+volume_t *volume_list = NULL;
+size_t nvolumes = 0;
+size_t maxnvolumes = 0;
+size_t ivolume = 0;
 
-ctx_t ctx = {
-	basedir: NULL,
-	basedir_len: 0,
-	volume: NULL,
-	was_err: 0,
-	count: 0,
-};
+ctx_t *threads = NULL;
 
-const char *optstring = "hc:";
+const char *optstring = "hc:l:n:s:";
 
 const struct option longopts[] = {
 	{ "help", no_argument, NULL, 'h' },
 	{ "config", required_argument, NULL, 'c' },
+	{ "list", required_argument, NULL, 'l' },
+	{ "num-threads", required_argument, NULL, 'n' },
+	{ "servicedir", required_argument, NULL, 's' },
 	{ NULL, 0, NULL, 0 }
 };
 
 
 
 static void usage() {
-	printf("%s [OPTIONS] VOLUME DIRECTORY\n\
+	printf("Usage:\n\
+  %s [OPTIONS] -l, --list FILE | VOLUME [DIRECTORY]\n\
+\n\
 OPTIONS are:\n\
-  -h, --help .......... help message\n\
-  -c, --config=FILE ... config file\n\
+  -h, --help ............ help message\n\
+  -c, --config=FILE ..... config file\n\
+  -n, --num-threads=N ... number of parallel threads\n\
+  -s, --servicedir=DIR ... empty helper directory for mounting\n\
 ", program_name);
 }
 
@@ -112,6 +130,7 @@ static int read_config(const char *config_file) {
 	}
 
 	while (fgets(buf, sizeof buf, f) != NULL) {
+		if (buf[0] == '#') continue;
 		split_key_value(buf, &key, &value);
 		if ((strcmp(key, "host") == 0)) {
 			free(host);
@@ -125,6 +144,9 @@ static int read_config(const char *config_file) {
 		} if ((strcmp(buf, "password") == 0)) {
 			free(password);
 			password = value ? strdup(value) : NULL;
+		} if ((strcmp(buf, "servicedir") == 0)) {
+			free(servicedir);
+			servicedir = value ? strdup(value) : NULL;
 		}
 	}
 	if (ferror(f)) {
@@ -144,6 +166,61 @@ err:
 	free(user);
 	free(password);
 	return retval;
+}
+
+
+static void add_volume(const char *volume, const char *mountpoint) {
+	void *tmp;
+
+	if (nvolumes >= maxnvolumes) {
+		if (maxnvolumes) maxnvolumes *= 2;
+		else maxnvolumes = 512;
+		tmp = realloc(volume_list, maxnvolumes * sizeof(volume_t));
+		volume_list = tmp;
+	}
+
+	volume_list[nvolumes].volume = strdup(volume);
+	volume_list[nvolumes].mountpoint = mountpoint ? strdup(mountpoint) : NULL;
+	memset(&volume_list[++nvolumes], 0, sizeof(volume_t));
+}
+
+
+static int read_list(const char *list_file) {
+	char buf[1024];
+	FILE *f;
+	size_t i;
+	char *volume, *mountpoint;
+
+	if ((f = fopen(list_file, "r")) == NULL) {
+		fprintf(stderr, "Can't read volume list file '%s': %s\n", list_file, strerror(errno));
+		return -1;
+	}
+
+	while (fgets(buf, sizeof buf, f) != NULL) {
+		if (buf[0] == '#') continue;
+
+		i = strlen(buf);
+		while (i > 0 && (buf[i - 1] == '\n' || buf[i - 1] == '\r')) i--;
+		buf[i] = 0;
+
+		volume = buf;
+		mountpoint = buf + strcspn(buf, " \t");
+		if (mountpoint[0]) {
+			mountpoint[0] = 0;
+			mountpoint++;
+		} else {
+			mountpoint = NULL;
+		}
+
+		add_volume(volume, mountpoint);
+	}
+	if (ferror(f)) {
+		fprintf(stderr, "Error reading volume list file '%s': %s\n", list_file, strerror(errno));
+		fclose(f);
+		return -1;
+	}
+
+	return 0;
 }
 
 
@@ -208,7 +285,7 @@ static int action(const char *path, int level, void *data) {
 
 	if (list_mount(path, &mount) == 0) {
 		if (level != 0) {
-			printf("(%s -> %s) ", relpath, mount); fflush(stdout);
+			printf("%s: (%s -> %s)\n", ctx->volume, relpath, mount);
 			save_point(ctx, relpath, mount);
 			free(mount);
 			return BROWSE_ACTION_SKIP;
@@ -232,7 +309,7 @@ static int action(const char *path, int level, void *data) {
 		glite_lbu_Transaction(ctx->db);
 	}
 	if ((ctx->count % COUNT_PROGRESS) == 0) {
-		printf("%zd ", ctx->count); fflush(stdout);
+		printf("%s: %zd\n", ctx->volume, ctx->count);
 	}
 
 	return BROWSE_ACTION_OK;
@@ -244,13 +321,128 @@ static double timeval2double(const struct timeval *tv) {
 }
 
 
+/**
+ * Get next volume to process.
+ */
+static int get_volume(ctx_t *ctx) {
+	int retval = 0;
+	char *original_mountpoint;
+
+	pthread_mutex_lock(&lock);
+	if (ivolume < nvolumes) {
+		ctx->volume = volume_list[ivolume].volume;
+		original_mountpoint = volume_list[ivolume].mountpoint;
+		ivolume++;
+	} else {
+		ctx->volume = NULL;
+		original_mountpoint = NULL;
+	}
+	pthread_mutex_unlock(&lock);
+
+	if (ctx->volume) {
+		if (original_mountpoint) {
+		/* use existing mountpoint */
+			ctx->basedir = original_mountpoint;
+			ctx->mountpoint = NULL;
+		} else {
+		/* mount into helper directory */
+			asprintf(&ctx->mountpoint, "%s/%d-%s", servicedir, ctx->id, ctx->volume);
+			if ((retval = make_mount(ctx->mountpoint, ctx->volume, 0, NULL)) != 0) {
+				fprintf(stderr, "%d: can't mount '%s' to '%s': %s\n", ctx->id, ctx->volume, ctx->mountpoint, strerror(errno));
+				ctx->was_err = 1;
+				free(ctx->mountpoint);
+				ctx->mountpoint = NULL;
+				return retval;
+			}
+			ctx->basedir = ctx->mountpoint;
+		}
+		ctx->basedir_len = strlen(ctx->basedir);
+	} else {
+		ctx->basedir = NULL;
+	}
+
+	return 0;
+}
+
+
+/**
+ * Release the processed volume.
+ */
+static void return_volume(ctx_t *ctx) {
+	if (ctx->mountpoint) {
+		if (remove_mount(ctx->mountpoint) != 0) {
+			fprintf(stderr, "%d: can't unmount '%s' from '%s': %s\n", ctx->id, ctx->volume, ctx->mountpoint, strerror(errno));
+		}
+		free(ctx->mountpoint);
+		ctx->mountpoint = NULL;
+	}
+}
+
+
+void *browser_thread(void *data) {
+	ctx_t *ctx = (ctx_t *)data;
+	int connected = 0;
+	double duration, ratio;
+
+	if (glite_lbu_InitDBContext(&ctx->db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
+		fprintf(stderr, "DB module initialization failed\n\n");
+		return NULL;
+	}
+
+	if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
+	connected = 1;
+	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
+	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
+
+	do {
+		ctx->count = 0;
+
+		while (get_volume(ctx) != 0 && ctx->volume) { };
+		if (!ctx->volume) break;
+
+		printf("%s: [thread %d]\n", ctx->volume, ctx->id);
+		gettimeofday(&ctx->begin, NULL);
+		glite_lbu_Transaction(ctx->db);
+
+		browse(ctx->basedir, action, ctx);
+
+		glite_lbu_Commit(ctx->db);
+
+		gettimeofday(&ctx->end, NULL);
+		duration = timeval2double(&ctx->end) - timeval2double(&ctx->begin);
+		ratio = (duration > 0.001) ? ctx->count / duration : 0;
+		printf("%s: %zd done, time %lf, ratio %lf dirs/s\n", ctx->volume, ctx->count, duration, ratio);
+
+		return_volume(ctx);
+	} while (ctx->volume);
+
+	glite_lbu_FreeStmt(&ctx->points_stmt);
+	glite_lbu_FreeStmt(&ctx->rights_stmt);
+	glite_lbu_DBClose(ctx->db);
+	glite_lbu_FreeDBContext(ctx->db);
+
+	return NULL;
+dberr:
+	print_DBError(ctx->db);
+	if (connected) glite_lbu_DBClose(ctx->db);
+	glite_lbu_FreeDBContext(ctx->db);
+	return NULL;
+}
+
+
 int main(int argc, char *argv[]) {
 	int retval = EXIT_FATAL;
 	int arg;
+	size_t i;
 
 	program_name = strrchr(argv[0], '/');
 	if (program_name) program_name++;
 	else program_name = argv[0];
+
+	if (pthread_mutex_init(&lock, NULL) != 0) {
+		fprintf(stderr, "Error initializing pthread mutex\n");
+		return EXIT_FATAL;
+	}
 
 	while ((arg = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
 		switch (arg) {
@@ -259,55 +451,84 @@ int main(int argc, char *argv[]) {
 			return EXIT_OK;
 			break;
 		case 'c':
-			if (read_config(optarg) != 0) return EXIT_FATAL;
+			if (read_config(optarg) != 0) goto err;
+			break;
+		case 's':
+			free(servicedir);
+			servicedir = strdup(optarg);
+			break;
+		case 'l':
+			if (read_list(optarg) != 0) goto err;
+			break;
+		case 'n':
+			nthreads = atoi(optarg);
+			if (nthreads == 0 || nthreads > 1000) {
+				fprintf(stderr, "Strange number of threads (%zd)\n", nthreads);
+				goto err;
+			}
 			break;
 		}
 	}
-	if (optind + 2 != argc) {
-		usage();
-		return EXIT_FATAL;
+	if (optind < argc) {
+		char *volume, *point;
+
+		volume = argv[optind++];
+		if (optind < argc) point = argv[optind++];
+		else point = NULL;
+		add_volume(volume, point);
 	}
-	ctx.volume = argv[optind++];
-	ctx.basedir = argv[optind++];
-	ctx.basedir_len = strlen(ctx.basedir);
+	if (!volume_list) {
+		fprintf(stderr, "No volumes specified.\n\n");
+		usage();
+		goto err;
+	}
+	if (!servicedir) {
+		for (ivolume = 0; ivolume < nvolumes; ivolume++) {
+			if (!volume_list[ivolume].mountpoint) {
+				fprintf(stderr, "Service directory is needed or all mountpoints needs to be specified (volume '%s').\n\n", volume_list[ivolume].volume);
+				usage();
+				goto err;
+			}
+		}
+	}
 	if (!dbcs) dbcs = strdup(DEFAULT_DBCS);
 
 	if (!has_afs()) {
 		fprintf(stderr, "has_afs() failed\n");
-		return EXIT_FATAL;
+		goto err;
 	}
 
 	glite_common_log_init();
-	if (glite_lbu_InitDBContext(&ctx.db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
-		fprintf(stderr, "DB module initialization failed\n\n");
-		return EXIT_FATAL;
+	ivolume = 0;
+	threads = calloc(nthreads, sizeof(ctx_t));
+	for (i = 0; i < nthreads; i++) {
+		threads[i].id = i;
+		if (pthread_create(&threads[i].thread, NULL, browser_thread, threads + i) != 0) {
+			fprintf(stderr, "Error creating %d. thread: %s\n", i, strerror(errno));
+			goto err;
+		}
 	}
-
-	if (glite_lbu_DBConnect(ctx.db, dbcs) != 0) goto dberr;
-	if (glite_lbu_PrepareStmt(ctx.db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx.points_stmt) != 0) goto dberr;
-	if (glite_lbu_PrepareStmt(ctx.db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx.rights_stmt) != 0) goto dberr;
-
-	printf("%s: ", ctx.volume); fflush(stdout);
-	gettimeofday(&ctx.begin, NULL);
-	glite_lbu_Transaction(ctx.db);
-	if (browse(ctx.basedir, action, &ctx) == BROWSE_ACTION_ABORT) retval = EXIT_FATAL;
-	printf("%zd ", ctx.count); fflush(stdout);
-	glite_lbu_Commit(ctx.db);
-	gettimeofday(&ctx.end, NULL);
-	printf("done, time %lf\n", timeval2double(&ctx.end) - timeval2double(&ctx.begin)); fflush(stdout);
-	if (ctx.was_err) retval = EXIT_ERRORS;
-
-	glite_lbu_FreeStmt(&ctx.points_stmt);
-	glite_lbu_FreeStmt(&ctx.rights_stmt);
-	glite_lbu_DBClose(ctx.db);
+	retval = EXIT_OK;
+	for (i = 0; i < nthreads; i++) {
+		if (pthread_join(threads[i].thread, NULL) != 0) {
+			fprintf(stderr, "Error can't join %d. thread: %s\n", i, strerror(errno));
+			retval = EXIT_FATAL;
+		}
+		if (threads[i].was_err && retval != EXIT_FATAL) retval = EXIT_ERRORS;
+	}
 
 err:
 	free(dbcs);
-	glite_lbu_FreeDBContext(ctx.db);
+	free(servicedir);
+	if (volume_list) {
+		for (ivolume = 0; ivolume < nvolumes; ivolume++) {
+			free(volume_list[ivolume].volume);
+			free(volume_list[ivolume].mountpoint);
+		}
+		free(volume_list);
+	}
 	glite_common_log_fini();
+	pthread_mutex_destroy(&lock);
 
 	return retval;
-dberr:
-	print_DBError(ctx.db);
-	goto err;
 }
