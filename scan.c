@@ -450,6 +450,7 @@ int main(int argc, char *argv[]) {
 	int retval = EXIT_FATAL;
 	int arg;
 	size_t i;
+	struct timeval begin, end;
 
 	program_name = strrchr(argv[0], '/');
 	if (program_name) program_name++;
@@ -523,6 +524,7 @@ int main(int argc, char *argv[]) {
 	if (sigaction(SIGINT, &sa, &osa) != 0) {
 		fprintf(stderr, "Warning: installing signal handler failed: %s\n", strerror(errno));
 	}
+	gettimeofday(&begin, NULL);
 	glite_common_log_init();
 	ivolume = 0;
 	threads = calloc(nthreads, sizeof(ctx_t));
@@ -541,6 +543,8 @@ int main(int argc, char *argv[]) {
 		}
 		if (threads[i].was_err && retval != EXIT_FATAL) retval = EXIT_ERRORS;
 	}
+	gettimeofday(&end, NULL);
+	printf("[main] run duration: %lf\n", timeval2double(&end) - timeval2double(&begin));
 
 err:
 	free(dbcs);
