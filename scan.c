@@ -181,7 +181,7 @@ static void add_volume(const char *volume, const char *mountpoint) {
 
 	volume_list[nvolumes].volume = strdup(volume);
 	volume_list[nvolumes].mountpoint = mountpoint ? strdup(mountpoint) : NULL;
-	memset(&volume_list[++nvolumes], 0, sizeof(volume_t));
+	nvolumes++;
 }
 
 
@@ -285,7 +285,7 @@ static int action(const char *path, int level, void *data) {
 
 	if (list_mount(path, &mount) == 0) {
 		if (level != 0) {
-			printf("%s: (%s -> %s)\n", ctx->volume, relpath, mount);
+			printf("[thread %d] %s: (%s -> %s)\n", ctx->id, ctx->volume, relpath, mount);
 			save_point(ctx, relpath, mount);
 			free(mount);
 			return BROWSE_ACTION_SKIP;
@@ -384,6 +384,8 @@ void *browser_thread(void *data) {
 	int connected = 0;
 	double duration, ratio;
 
+	printf("[thread %d] started\n", ctx->id);
+
 	if (glite_lbu_InitDBContext(&ctx->db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
 		fprintf(stderr, "DB module initialization failed\n\n");
 		return NULL;
@@ -400,7 +402,6 @@ void *browser_thread(void *data) {
 		while (get_volume(ctx) != 0 && ctx->volume) { };
 		if (!ctx->volume) break;
 
-		printf("%s: [thread %d]\n", ctx->volume, ctx->id);
 		gettimeofday(&ctx->begin, NULL);
 		glite_lbu_Transaction(ctx->db);
 
@@ -411,7 +412,7 @@ void *browser_thread(void *data) {
 		gettimeofday(&ctx->end, NULL);
 		duration = timeval2double(&ctx->end) - timeval2double(&ctx->begin);
 		ratio = (duration > 0.001) ? ctx->count / duration : 0;
-		printf("%s: %zd done, time %lf, ratio %lf dirs/s\n", ctx->volume, ctx->count, duration, ratio);
+		printf("[thread %d] %s: %zd dirs, time %lf, ratio %lf dirs/s\n", ctx->id, ctx->volume, ctx->count, duration, ratio);
 
 		return_volume(ctx);
 	} while (ctx->volume);
@@ -420,6 +421,8 @@ void *browser_thread(void *data) {
 	glite_lbu_FreeStmt(&ctx->rights_stmt);
 	glite_lbu_DBClose(ctx->db);
 	glite_lbu_FreeDBContext(ctx->db);
+
+	printf("[thread] %d finished\n", ctx->id);
 
 	return NULL;
 dberr:
