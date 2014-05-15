@@ -1,10 +1,12 @@
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "array.h"
 #include "browse.h"
@@ -54,6 +56,7 @@ static void path_concat(char **path, const char *parent, const char *name) {
 
 
 int browse(const char *path, browse_action_f *action_cb, void *data) {
+	struct stat statinfo;
 	array_t stack;
 	browse_node_t *node;
 	int level = 0;
@@ -95,6 +98,22 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 
 			path_concat(&subpath, node->path, entry->d_name);
 
+			/*
+			 * DT_UNKNOWN is quite usual on AFS,
+			 * let's do not cut browsing on it
+			 * ==> check + refresh using lstat()
+			 */
+			if (entry->d_type == DT_UNKNOWN) {
+				if (lstat(subpath, &statinfo) == 0) {
+					if (S_ISDIR(statinfo.st_mode)) {
+						entry->d_type = DT_DIR;
+						/*printf("refreshed directory cache '%s'\n", subpath);*/
+					}
+				} else {
+					log_errno("can't refresh not cached file '%s'", subpath);
+					err = 1;
+				}
+			}
 			if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") && (retval = action_cb(subpath, level, data)) == BROWSE_ACTION_OK) {
 			/* yes, continue to go down */
 				level++;
