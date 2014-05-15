@@ -217,7 +217,7 @@ int list_mount(const char *path, char **mount) {
 	char *space = NULL, *parent = NULL, *name = NULL;
 	int code;
 
-	*mount = NULL;
+	if (mount) *mount = NULL;
 
 	get_parent(path, &parent, &name);
 	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
@@ -233,8 +233,10 @@ int list_mount(const char *path, char **mount) {
 
 	code = pioctl(parent, VIOC_AFS_STAT_MT_PT, &blob, 1);
 	if (code == 0) {
-		*mount = space;
-		space = NULL;
+		if (mount) {
+			*mount = space;
+			space = NULL;
+		}
 	}
 err:
 	free(space);
