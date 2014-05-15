@@ -11,6 +11,11 @@ LBU_LIBS=-lglite_lbu_db -lglite_lbu_log
 CC=gcc
 CPPFLAGS?=-D_GNU_SOURCE -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
 CFLAGS?=-W -Wall -g -O0
+ifeq ($(COVERAGE),)
+else
+CFLAGS+=-pg -fprofile-arcs -ftest-coverage
+LDFLAGS+=-pg -fprofile-arcs -ftest-coverage
+endif
 
 BINS=scan test_browse test_rmmount test_tinyafs
 
@@ -30,6 +35,7 @@ test_tinyafs: tinyafs.o test_tinyafs.o
 
 clean:
 	rm -fv *.o $(BINS)
+	rm -fv *.gcno *.gcda gmon.out
 
 array.o: array.h
 scan.o: browse.h tinyafs.h
