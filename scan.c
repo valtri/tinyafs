@@ -544,6 +544,7 @@ int main(int argc, char *argv[]) {
 		if (threads[i].was_err && retval != EXIT_FATAL) retval = EXIT_ERRORS;
 	}
 	gettimeofday(&end, NULL);
+	if (ivolume > 0) printf("[main] last volume: %s\n", volume_list[ivolume - 1].volume);
 	printf("[main] run duration: %lf\n", timeval2double(&end) - timeval2double(&begin));
 
 err:
