@@ -159,6 +159,13 @@ static int read_config(const char *config_file) {
 		} if ((strcmp(buf, "servicedir") == 0)) {
 			free(servicedir);
 			servicedir = value ? strdup(value) : NULL;
+		} if ((strcmp(buf, "threads") == 0)) {
+			nthreads = atoi(value);
+			if (nthreads == 0 || nthreads > 1000) {
+				fprintf(stderr, "Strange number of threads (%zd)\n", nthreads);
+				fclose(f);
+				goto err;
+			}
 		}
 	}
 	if (ferror(f)) {
