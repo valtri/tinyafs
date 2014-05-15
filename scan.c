@@ -22,6 +22,8 @@
 
 #define DEFAULT_DBCS DEFAULT_DBNAME "/" DEFAULT_DBPASS "@" DEFAULT_DBHOST ":" DEFAULT_DBNAME
 
+#define DEFAULT_MAX_DEPTH 200
+
 #define EXIT_OK 0
 #define EXIT_ERRORS 1
 #define EXIT_FATAL 2
@@ -60,6 +62,7 @@ char *program_name = NULL;
 char *dbcs = NULL;
 char *servicedir = NULL;
 size_t nthreads = 1;
+int max_depth = DEFAULT_MAX_DEPTH;
 volume_t *volume_list = NULL;
 size_t nvolumes = 0;
 size_t maxnvolumes = 0;
@@ -68,12 +71,13 @@ sig_atomic_t quit = 0;
 
 ctx_t *threads = NULL;
 
-const char *optstring = "hc:l:n:s:";
+const char *optstring = "hc:l:m:n:s:";
 
 const struct option longopts[] = {
 	{ "help", no_argument, NULL, 'h' },
 	{ "config", required_argument, NULL, 'c' },
 	{ "list", required_argument, NULL, 'l' },
+	{ "max-depth", required_argument, NULL, 'm' },
 	{ "num-threads", required_argument, NULL, 'n' },
 	{ "servicedir", required_argument, NULL, 's' },
 	{ NULL, 0, NULL, 0 }
@@ -86,11 +90,12 @@ static void usage() {
   %s [OPTIONS] -l, --list FILE | VOLUME [DIRECTORY]\n\
 \n\
 OPTIONS are:\n\
-  -h, --help ............ help message\n\
-  -c, --config=FILE ..... config file\n\
-  -n, --num-threads=N ... number of parallel threads\n\
+  -h, --help ............. help message\n\
+  -c, --config=FILE ...... config file\n\
+  -m, --max-depth=DEPTH .. maximal directory level to go into [%d]\n\
+  -n, --num-threads=N .... number of parallel threads [%d]\n\
   -s, --servicedir=DIR ... empty helper directory for mounting\n\
-", program_name);
+", program_name, max_depth, nthreads);
 }
 
 
@@ -281,14 +286,14 @@ static int action(const char *path, int level, void *data) {
 	size_t i;
 	ctx_t *ctx = (ctx_t *)data;
 
-	if (level >= 200) {
-		fprintf(stderr, "level too high, skipping: %s\n", path);
-		return BROWSE_ACTION_SKIP;
-	}
-
 	if (strncmp(path, ctx->basedir, ctx->basedir_len) == 0) relpath = path + ctx->basedir_len;
 	else relpath = path;
 	if (relpath[0] == '/') relpath++;
+
+	if (max_depth > 0 && level >= max_depth) {
+		fprintf(stderr, "level too high, skipping: %s:%s\n", ctx->volume, relpath);
+		return BROWSE_ACTION_SKIP;
+	}
 
 	if (list_mount(path, &mount) == 0) {
 		if (level != 0) {
@@ -302,7 +307,7 @@ static int action(const char *path, int level, void *data) {
 	}
 
 	if (get_acl(path, &acl) != 0) {
-		fprintf(stderr, "error getting ACLs for '%s': %s\n", path, strerror(errno));
+		fprintf(stderr, "error getting ACLs for %s:%s: %s\n", ctx->volume, relpath, strerror(errno));
 		ctx->was_err = 1;
 		return BROWSE_ACTION_OK;
 	}
@@ -470,6 +475,9 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'l':
 			if (read_list(optarg) != 0) goto err;
+			break;
+		case 'm':
+			max_depth = atoi(optarg);
 			break;
 		case 'n':
 			nthreads = atoi(optarg);
