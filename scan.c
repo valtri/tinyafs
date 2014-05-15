@@ -1,3 +1,5 @@
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <errno.h>
 #include <getopt.h>
@@ -127,6 +129,7 @@ static void split_key_value(char *buf, char **result_key, char **result_value) {
 
 
 static int read_config(const char *config_file) {
+	struct stat statinfo;
 	char buf[1024];
 	FILE *f;
 	char *host = NULL;
@@ -135,6 +138,14 @@ static int read_config(const char *config_file) {
 	char *password = NULL;
 	char *key, *value;
 	int retval = -1;
+
+	if (stat(config_file, &statinfo) != 0) {
+		fprintf(stderr, "Can't stat config file '%s': %s\n", config_file, strerror(errno));
+		return -1;
+	}
+	if ((statinfo.st_mode & 0177) != 0) {
+		fprintf(stderr, "Warning: rights for the config file '%s' are too permissive!\n", config_file);
+	}
 
 	if ((f = fopen(config_file, "r")) == NULL) {
 		fprintf(stderr, "Can't read config file '%s': %s\n", config_file, strerror(errno));
