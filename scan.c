@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +64,7 @@ volume_t *volume_list = NULL;
 size_t nvolumes = 0;
 size_t maxnvolumes = 0;
 size_t ivolume = 0;
+sig_atomic_t quit = 0;
 
 ctx_t *threads = NULL;
 
@@ -89,6 +91,11 @@ OPTIONS are:\n\
   -n, --num-threads=N ... number of parallel threads\n\
   -s, --servicedir=DIR ... empty helper directory for mounting\n\
 ", program_name);
+}
+
+
+static void handle_signal(int sig __attribute__((unused))) {
+	quit = 1;
 }
 
 
@@ -415,7 +422,7 @@ void *browser_thread(void *data) {
 		printf("[thread %d] %s: %zd dirs, time %lf, ratio %lf dirs/s\n", ctx->id, ctx->volume, ctx->count, duration, ratio);
 
 		return_volume(ctx);
-	} while (ctx->volume);
+	} while (ctx->volume && !quit);
 
 	glite_lbu_FreeStmt(&ctx->points_stmt);
 	glite_lbu_FreeStmt(&ctx->rights_stmt);
@@ -434,6 +441,7 @@ dberr:
 
 
 int main(int argc, char *argv[]) {
+	struct sigaction sa, osa;
 	int retval = EXIT_FATAL;
 	int arg;
 	size_t i;
@@ -501,6 +509,12 @@ int main(int argc, char *argv[]) {
 		goto err;
 	}
 
+	memset(&sa, 0, sizeof(sa));
+	sigemptyset(&sa.sa_mask);
+	sa.sa_handler = handle_signal;
+	if (sigaction(SIGINT, &sa, &osa) != 0) {
+		fprintf(stderr, "Warning: installing signal handler failed: %s\n", strerror(errno));
+	}
 	glite_common_log_init();
 	ivolume = 0;
 	threads = calloc(nthreads, sizeof(ctx_t));
