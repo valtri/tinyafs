@@ -1,5 +1,6 @@
 -include Makefile.inc
 
+prefix=/usr
 libdir?=lib
 AFS_PREFIX?=/usr
 AFS_CPPFLAGS?=-I$(AFS_PREFIX)/include -DVENUS=1
@@ -10,35 +11,53 @@ LBU_LIBS=-lglite_lbu_db -lglite_lbu_log
 
 CC=gcc
 CPPFLAGS?=-D_GNU_SOURCE -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
-CFLAGS?=-W -Wall -g -O0
+CFLAGS?=-W -Wall -g -O2
 ifeq ($(COVERAGE),)
 else
 CFLAGS+=-pg -fprofile-arcs -ftest-coverage
 LDFLAGS+=-pg -fprofile-arcs -ftest-coverage
 endif
 
+COMPILE=libtool --mode=compile $(CC) -shared $(CFLAGS) $(CPPFLAGS)
+LINK=libtool --mode=link $(CC) -shared $(LDFLAGS)
+INSTALL=libtool --mode=install install
+
 BINS=scan test_browse test_rmmount test_tinyafs
 
 all: $(BINS)
 
-scan: scan.o browse.o array.o tinyafs.o
-	$(CC) $(LDFLAGS) -pthread $+ -o $@ $(AFS_LIBS) $(LBU_LIBS)
+libtinyafs.la: array.lo tinyafs.lo browse.lo
+	$(LINK) -pthread -rpath $(prefix)/$(libdir) $+ -o $@ $(AFS_LIBS)
 
-test_browse: test_browse.o browse.o array.o
-	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
+scan: scan.lo libtinyafs.la
+	$(LINK) $(LDFLAGS) -pthread $+ -o $@ $(LBU_LIBS)
 
-test_rmmount: test_rmmount.o tinyafs.o
-	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
+test_browse: test_browse.lo libtinyafs.la
+	$(LINK) $(LDFLAGS) $+ -o $@
 
-test_tinyafs: tinyafs.o test_tinyafs.o
-	$(CC) $(LDFLAGS) $+ -o $@ $(AFS_LIBS)
+test_rmmount: test_rmmount.lo libtinyafs.la
+	$(LINK) $(LDFLAGS) $+ -o $@
+
+test_tinyafs: test_tinyafs.lo libtinyafs.la
+	$(LINK) $(LDFLAGS) $+ -o $@
+
+install:
+	mkdir -p $(DESTDIR)$(prefix)/$(libdir) $(DESTDIR)$(prefix)/include $(DESTDIR)$(prefix)/share/tinyafs
+	$(INSTALL) libtinyafs.la $(DESTDIR)$(prefix)/$(libdir)
+	$(INSTALL) *.h $(DESTDIR)$(prefix)/include
+	$(INSTALL) *.sql post-import-points.pl refresh.sh $(DESTDIR)$(prefix)/share/tinyafs
 
 clean:
-	rm -fv *.o $(BINS)
+	rm -rfv *.o *.lo *.la .libs/ $(BINS)
 	rm -fv *.gcno *.gcda gmon.out
 
-array.o: array.h
-scan.o: browse.h tinyafs.h
-test_browse.o: browse.h
-test_tinyafs.o: tinyafs.h
-tinyafs.o: tinyafs.h
+%.lo: %.c
+	$(COMPILE) -c $<
+
+array.lo: array.h
+scan.lo: browse.h tinyafs.h
+test_browse.lo: browse.h
+test_tinyafs.lo: tinyafs.h
+tinyafs.lo: tinyafs.h
+
+.PHONY: all install clean
