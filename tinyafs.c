@@ -214,18 +214,10 @@ static void get_parent(const char *path, char **parent, char **name) {
 
 int list_mount(const char *path, char **mount) {
 	struct ViceIoctl blob;
-	struct stat info;
 	char *space = NULL, *parent = NULL, *name = NULL;
 	int code;
 
 	*mount = NULL;
-
-	/* lstat() may fail, but pioctl() can be still successfull */
-	if (lstat(path, &info) == 0) {
-		/* we won't support symlinks (requires translation of relative links, ...) */
-		if (S_ISLNK(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
-		if (!S_ISDIR(info.st_mode)) { errno = ENOTDIR; return ENOTDIR; }
-	}
 
 	get_parent(path, &parent, &name);
 	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
