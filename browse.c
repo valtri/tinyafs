@@ -57,7 +57,7 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 	array_t stack;
 	browse_node_t *node;
 	int level = 0;
-	struct dirent entry, *entry_r;
+	struct dirent *entry, *entry_r;
 	int retval, err = 0;
 	char *subpath;
 
@@ -67,6 +67,8 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 	default: return 2;
 	}
 
+	/* XXX: POSIX doesn't specify d_name field length, add some padding */
+	entry = malloc(sizeof(struct dirent) + (4096 > NAME_MAX ? 4096 : NAME_MAX));
 	array_init(&stack, sizeof(browse_node_t));
 
 	node = array_push(&stack);
@@ -83,16 +85,17 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 	while (node) {
 		/* read the directory and go down */
 		while (retval != BROWSE_ACTION_ABORT) {
-			if (readdir_r(node->dir, &entry, &entry_r) != 0) {
+			if (readdir_r(node->dir, entry, &entry_r) != 0) {
 				log_errno("error reading directory '%s'", path);
 				err = 1;
 				entry_r = NULL;
 			}
+			if (!entry_r) readdir_r(node->dir, entry, &entry_r);
 			if (!entry_r) break;
 
-			path_concat(&subpath, node->path, entry.d_name);
+			path_concat(&subpath, node->path, entry->d_name);
 
-			if (entry.d_type == DT_DIR && strcmp(entry.d_name, ".") != 0 && strcmp(entry.d_name, "..") && (retval = action_cb(subpath, level, data)) == BROWSE_ACTION_OK) {
+			if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") && (retval = action_cb(subpath, level, data)) == BROWSE_ACTION_OK) {
 			/* yes, continue to go down */
 				level++;
 
@@ -116,6 +119,7 @@ int browse(const char *path, browse_action_f *action_cb, void *data) {
 		level--;
 	}
 
+	free(entry);
 	array_destroy(&stack);
 
 	if (retval == BROWSE_ACTION_ABORT) err |= 2;
