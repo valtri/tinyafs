@@ -22,7 +22,7 @@ COMPILE=libtool --mode=compile $(CC) -shared $(CFLAGS) $(CPPFLAGS)
 LINK=libtool --mode=link $(CC) -shared $(LDFLAGS)
 INSTALL=libtool --mode=install install
 
-BINS=scan scan_mountpoints test_browse test_rmmount test_tinyafs
+BINS=scan scan_mountpoints test_array test_browse test_rmmount test_tinyafs
 
 all: $(BINS)
 
@@ -34,6 +34,9 @@ scan: scan.lo libtinyafs.la
 
 scan_mountpoints: scan_mountpoints.lo libtinyafs.la
 	$(LINK) $(LDFLAGS) -pthread $+ -o $@
+
+test_array: test_array.lo libtinyafs.la
+	$(LINK) $(LDFLAGS) $+ -o $@
 
 test_browse: test_browse.lo libtinyafs.la
 	$(LINK) $(LDFLAGS) $+ -o $@
