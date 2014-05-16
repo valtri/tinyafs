@@ -67,6 +67,7 @@ char *servicedir = NULL;
 size_t nthreads = 1;
 int max_depth = DEFAULT_MAX_DEPTH;
 char *cell = NULL;
+int dry_run = 0;
 
 volume_t *volume_list = NULL;
 size_t nvolumes = 0;
@@ -76,10 +77,11 @@ sig_atomic_t quit = 0;
 
 ctx_t *threads = NULL;
 
-const char *optstring = "a:hc:l:m:n:s:";
+const char *optstring = "a:c:dhl:m:n:s:";
 
 const struct option longopts[] = {
 	{ "cell", required_argument, NULL, 'a' },
+	{ "dry-run", no_argument, NULL, 'd' },
 	{ "help", no_argument, NULL, 'h' },
 	{ "config", required_argument, NULL, 'c' },
 	{ "list", required_argument, NULL, 'l' },
@@ -97,8 +99,9 @@ static void usage() {
 \n\
 OPTIONS are:\n\
   -a, --cell=CELL ........ default AFS cell name\n\
-  -h, --help ............. help message\n\
   -c, --config=FILE ...... config file\n\
+  -d, --dry-run .......... do not save to database\n\
+  -h, --help ............. help message\n\
   -m, --max-depth=DEPTH .. maximal directory level to go into [%d]\n\
   -n, --num-threads=N .... number of parallel threads [%d]\n\
   -s, --servicedir=DIR ... empty helper directory for mounting\n\
@@ -332,7 +335,7 @@ static int action(const char *path, int level, void *data) {
 	if (list_mount(path, &mount) == 0) {
 		if (level != 0) {
 			printf("[thread %d] %s: (%s -> %s)\n", ctx->id, ctx->volume, relpath, mount);
-			save_point(ctx, relpath, mount);
+			if (!dry_run) save_point(ctx, relpath, mount);
 			free(mount);
 			return BROWSE_ACTION_SKIP;
 		} else {
@@ -345,12 +348,14 @@ static int action(const char *path, int level, void *data) {
 		ctx->was_err = 1;
 		return BROWSE_ACTION_OK;
 	}
-	for (i = 0; i < acl.nplus; i++) save_rights(ctx, relpath, acl.plus + i, 0);
-	for (i = 0; i < acl.nminus; i++) save_rights(ctx, relpath, acl.minus + i, 1);
+	if (!dry_run) {
+		for (i = 0; i < acl.nplus; i++) save_rights(ctx, relpath, acl.plus + i, 0);
+		for (i = 0; i < acl.nminus; i++) save_rights(ctx, relpath, acl.minus + i, 1);
+	}
 	free_acl(&acl);
 
 	ctx->count++;
-	if ((ctx->count % COUNT_COMMIT) == 0) {
+	if (!dry_run && (ctx->count % COUNT_COMMIT) == 0) {
 		glite_lbu_Commit(ctx->db);
 		glite_lbu_Transaction(ctx->db);
 	}
@@ -432,15 +437,17 @@ void *browser_thread(void *data) {
 
 	printf("[thread %d] started\n", ctx->id);
 
-	if (glite_lbu_InitDBContext(&ctx->db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
-		fprintf(stderr, "DB module initialization failed\n\n");
-		return NULL;
-	}
+	if (!dry_run) {
+		if (glite_lbu_InitDBContext(&ctx->db, GLITE_LBU_DB_BACKEND_MYSQL, "DB") != 0) {
+			fprintf(stderr, "DB module initialization failed\n\n");
+			return NULL;
+		}
 
-	if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
-	connected = 1;
-	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
-	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
+		if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
+		connected = 1;
+		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
+		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
+	}
 
 	do {
 		ctx->count = 0;
@@ -449,13 +456,13 @@ void *browser_thread(void *data) {
 		if (!ctx->volume) break;
 
 		gettimeofday(&ctx->begin, NULL);
-		glite_lbu_Transaction(ctx->db);
+		if (!dry_run) glite_lbu_Transaction(ctx->db);
 
 		browse(ctx->basedir, action, ctx);
 
-		glite_lbu_Commit(ctx->db);
-
+		if (!dry_run) glite_lbu_Commit(ctx->db);
 		gettimeofday(&ctx->end, NULL);
+
 		duration = timeval2double(&ctx->end) - timeval2double(&ctx->begin);
 		ratio = (duration > 0.001) ? ctx->count / duration : 0;
 		printf("[thread %d] %s: %zd dirs, time %lf, ratio %lf dirs/s\n", ctx->id, ctx->volume, ctx->count, duration, ratio);
@@ -463,18 +470,22 @@ void *browser_thread(void *data) {
 		return_volume(ctx);
 	} while (ctx->volume && !quit);
 
-	glite_lbu_FreeStmt(&ctx->points_stmt);
-	glite_lbu_FreeStmt(&ctx->rights_stmt);
-	glite_lbu_DBClose(ctx->db);
-	glite_lbu_FreeDBContext(ctx->db);
+	if (!dry_run) {
+		glite_lbu_FreeStmt(&ctx->points_stmt);
+		glite_lbu_FreeStmt(&ctx->rights_stmt);
+		glite_lbu_DBClose(ctx->db);
+		glite_lbu_FreeDBContext(ctx->db);
+	}
 
 	printf("[thread] %d finished\n", ctx->id);
 
 	return NULL;
 dberr:
-	print_DBError(ctx->db);
-	if (connected) glite_lbu_DBClose(ctx->db);
-	glite_lbu_FreeDBContext(ctx->db);
+	if (!dry_run) {
+		print_DBError(ctx->db);
+		if (connected) glite_lbu_DBClose(ctx->db);
+		glite_lbu_FreeDBContext(ctx->db);
+	}
 	return NULL;
 }
 
@@ -507,6 +518,9 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'c':
 			if (read_config(optarg) != 0) goto err;
+			break;
+		case 'd':
+			dry_run = 1;
 			break;
 		case 's':
 			free(servicedir);
