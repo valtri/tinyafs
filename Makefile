@@ -10,16 +10,16 @@ LBU_CPPFLAGS=
 LBU_LIBS=-lglite_lbu_db -lglite_lbu_log
 
 CC=gcc
-CPPFLAGS?=-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
-CFLAGS?=-W -Wall -g -O2
+CPPFLAGS:=-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS) $(CPPFLAGS)
+CFLAGS:=-W -Wall -g -O2 $(CFLAGS)
 ifeq ($(COVERAGE),)
 else
 CFLAGS+=-pg -fprofile-arcs -ftest-coverage
 LDFLAGS+=-pg -fprofile-arcs -ftest-coverage
 endif
 
-COMPILE=libtool --mode=compile $(CC) -shared $(CFLAGS) $(CPPFLAGS)
-LINK=libtool --mode=link $(CC) -shared $(LDFLAGS)
+COMPILE=libtool --mode=compile $(CC) $(CFLAGS) $(CPPFLAGS)
+LINK=libtool --mode=link $(CC) $(LDFLAGS)
 INSTALL=libtool --mode=install install
 
 BINS=scan scan_mountpoints test_array test_browse test_rmmount test_tinyafs
