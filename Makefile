@@ -15,7 +15,7 @@ CFLAGS:=-W -Wall -g -O2 $(CFLAGS)
 ifeq ($(COVERAGE),)
 else
 CFLAGS+=-pg -fprofile-arcs -ftest-coverage
-LDFLAGS+=-pg -fprofile-arcs -ftest-coverage
+LDFLAGS+=-pg -fprofile-arcs -ftest-coverage -static
 endif
 
 COMPILE=libtool --mode=compile $(CC) $(CFLAGS) $(CPPFLAGS)
