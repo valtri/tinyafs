@@ -10,7 +10,7 @@ LBU_CPPFLAGS=
 LBU_LIBS=-lglite_lbu_db -lglite_lbu_log
 
 CC=gcc
-CPPFLAGS?=-D_GNU_SOURCE -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
+CPPFLAGS?=-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -pthread $(AFS_CPPFLAGS) $(LBU_CPPFLAGS)
 CFLAGS?=-W -Wall -g -O2
 ifeq ($(COVERAGE),)
 else
