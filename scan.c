@@ -355,7 +355,7 @@ static int action(const char *path, int level, void *data) {
 		glite_lbu_Transaction(ctx->db);
 	}
 	if ((ctx->count % COUNT_PROGRESS) == 0) {
-		printf("%s: %zd\n", ctx->volume, ctx->count);
+		printf("[thread %d] %s: %zd dirs so far\n", ctx->id, ctx->volume, ctx->count);
 	}
 
 	return BROWSE_ACTION_OK;
