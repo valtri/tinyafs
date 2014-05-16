@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include <glite/lbu/db.h>
@@ -65,6 +66,8 @@ char *dbcs = NULL;
 char *servicedir = NULL;
 size_t nthreads = 1;
 int max_depth = DEFAULT_MAX_DEPTH;
+char *cell = NULL;
+
 volume_t *volume_list = NULL;
 size_t nvolumes = 0;
 size_t maxnvolumes = 0;
@@ -73,9 +76,10 @@ sig_atomic_t quit = 0;
 
 ctx_t *threads = NULL;
 
-const char *optstring = "hc:l:m:n:s:";
+const char *optstring = "a:hc:l:m:n:s:";
 
 const struct option longopts[] = {
+	{ "cell", required_argument, NULL, 'a' },
 	{ "help", no_argument, NULL, 'h' },
 	{ "config", required_argument, NULL, 'c' },
 	{ "list", required_argument, NULL, 'l' },
@@ -92,6 +96,7 @@ static void usage() {
   %s [OPTIONS] -l, --list FILE | VOLUME [DIRECTORY]\n\
 \n\
 OPTIONS are:\n\
+  -a, --cell=CELL ........ default AFS cell name\n\
   -h, --help ............. help message\n\
   -c, --config=FILE ...... config file\n\
   -m, --max-depth=DEPTH .. maximal directory level to go into [%d]\n\
@@ -167,6 +172,9 @@ static int read_config(const char *config_file) {
 		} if ((strcmp(buf, "password") == 0)) {
 			free(password);
 			password = value ? strdup(value) : NULL;
+		} if ((strcmp(buf, "cell") == 0)) {
+			free(cell);
+			cell = value ? strdup(value) : NULL;
 		} if ((strcmp(buf, "servicedir") == 0)) {
 			free(servicedir);
 			servicedir = value ? strdup(value) : NULL;
@@ -286,10 +294,18 @@ static void save_rights(ctx_t *ctx, const char *relpath, const struct AclEntry *
 
 
 static void save_point(ctx_t *ctx, const char *relpath, const char *mount) {
+	const char *volname;
+	size_t len;
+
+	volname = mount + 1;
+	if (cell) {
+		len = strlen(cell);
+		if (strncasecmp(volname, cell, len) == 0 && volname[len] == ':')  volname += len + 1;
+	}
 	if (glite_lbu_ExecPreparedStmt(ctx->points_stmt, 3,
 		GLITE_LBU_DB_TYPE_VARCHAR, ctx->volume,
 		GLITE_LBU_DB_TYPE_VARCHAR, relpath,
-		GLITE_LBU_DB_TYPE_VARCHAR, mount
+		GLITE_LBU_DB_TYPE_VARCHAR, volname
 	    ) != 1) {
 		print_DBError(ctx->db);
 		ctx->was_err = 1;
@@ -485,6 +501,10 @@ int main(int argc, char *argv[]) {
 			usage();
 			return EXIT_OK;
 			break;
+		case 'a':
+			free(cell);
+			cell = strdup(optarg);
+			break;
 		case 'c':
 			if (read_config(optarg) != 0) goto err;
 			break;
@@ -568,6 +588,7 @@ int main(int argc, char *argv[]) {
 err:
 	free(dbcs);
 	free(servicedir);
+	free(cell);
 	if (volume_list) {
 		for (ivolume = 0; ivolume < nvolumes; ivolume++) {
 			free(volume_list[ivolume].volume);
