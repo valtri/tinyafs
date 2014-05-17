@@ -19,7 +19,7 @@ The scan is performed separately for each volume, so it is needed to specify all
 \fB\-a\fR \fICELL\fB, \fB\-\-cell\fR=\fICELL\fR
 Default AFS cell name. Used for stripping from volume names.
 .TP
-\fB\-c \fB\-\-config\fR,\fR \fB\-\-config\fR=\fIFILE\fR
+\fB\-c \fIFILE\fR,\fR \fB\-\-config\fR=\fIFILE\fR
 Config file.
 .TP
 \fB\-d,\fR \fB\-\-dry-run\fR
@@ -27,6 +27,9 @@ Do not save to database, just a dry scan is performed.
 .TP
 \fB\-h,\fR \fB\-\-help\fR
 Print usage message.
+.TP
+\fB\-l\fR \fIFILE\fR, \fB\-\-list\fR=\fIFILE\fR
+List of the volumes and optionally their mountpoints separated by whitespace.
 .TP
 \fB\-m\fR \fIDEPTH\fR, \fB\-\-max-depth\fR=\fIDEPTH\fR
 Maximal directory level to go into. Default is 200.
