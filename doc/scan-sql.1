@@ -1,0 +1,52 @@
+.pc
+.TH SCAN-SQL 1 "2014-05-17" 0.0.0 "TinyAFS"
+
+.SH NAME
+scan-sql \- AFS volumes scanner gathering data to SQL database
+
+.SH SYNOPSIS
+\fBscan-sql\fR [\fIOPTIONS\fR] \fB\-l|\-\-list\fR \fIFILE\fR
+.br
+\fBscan-sql\fR [\fIOPTIONS\fR] \fIVOLUME\fR [\fIMOUNTPOINT\fR]
+
+.SH DESCRIPTION
+\fBscan-sql\fR gathers information about all mountpoints and ACL rights on AFS and stores them into SQL database.
+
+The scan is performed separately for each volume, so it is needed to specify all AFS volumes to scan by \fB\-l\fR|\fB\-\-list\fR option. Optionally you can specify mounpoints for some volumes. In case the mountpoint is not specified for a volume, it is temporarily mounted in helper service directory by \fBscan-sql\fR.
+
+.SH OPTIONS
+.TP
+\fB\-a\fR \fICELL\fB, \fB\-\-cell\fR=\fICELL\fR
+Default AFS cell name. Used for stripping from volume names.
+.TP
+\fB\-c \fB\-\-config\fR,\fR \fB\-\-config\fR=\fIFILE\fR
+Config file.
+.TP
+\fB\-d,\fR \fB\-\-dry-run\fR
+Do not save to database, just a dry scan is performed.
+.TP
+\fB\-h,\fR \fB\-\-help\fR
+Print usage message.
+.TP
+\fB\-m\fR \fIDEPTH\fR, \fB\-\-max-depth\fR=\fIDEPTH\fR
+Maximal directory level to go into. Default is 200.
+.TP
+\fB\-n\fR \fIN\fR, \fB\-\-num-threads\fR=\fIN\fR
+Number of parallel threads. Default is 1.
+.TP
+\fB\-s\fR \fIDIRECTORY\fR, \fB\-\-servicedir\fR=\fIDIRECTORY\fR
+Helper service directory for mounting volumes without mountpoints in the list. It must be located in AFS tree and it is recommended to be empty. This option is not required if mountpoints for all volumes were specified.
+
+.SH EXIT STATUS
+.TP
+.B 0
+Successful scan execution.
+.TP
+.B 1
+There were some errors, scan has finished successfully.
+.TP
+.B 2
+Fatal error, scan has not been performed.
+
+.SH NOTES
+Scanning per AFS volumes is less user-friendly than walking the whole AFS directory tree across mountpoints from the top. But it could be less error-prone in case of mistakes in mounting of some volumes. Also it is much easier to continue if previous scan has been interrupted.
