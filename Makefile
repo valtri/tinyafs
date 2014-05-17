@@ -22,17 +22,18 @@ COMPILE=libtool --mode=compile $(CC) $(CFLAGS) $(CPPFLAGS)
 LINK=libtool --mode=link $(CC) $(LDFLAGS)
 INSTALL=libtool --mode=install install
 
-BINS=scan scan_mountpoints test_array test_browse test_rmmount test_tinyafs
+BINS=scan-sql scan-mountpoints
+TESTS=test_array test_browse test_rmmount test_tinyafs
 
-all: $(BINS)
+all: $(BINS) $(TESTS)
 
 libtinyafs.la: array.lo tinyafs.lo browse.lo
 	$(LINK) -pthread -rpath $(prefix)/$(libdir) $+ -o $@ $(AFS_LIBS)
 
-scan: scan.lo libtinyafs.la
+scan-sql: scan_sql.lo libtinyafs.la
 	$(LINK) $(LDFLAGS) -pthread $+ -o $@ $(LBU_LIBS)
 
-scan_mountpoints: scan_mountpoints.lo libtinyafs.la
+scan-mountpoints: scan_mountpoints.lo libtinyafs.la
 	$(LINK) $(LDFLAGS) -pthread $+ -o $@
 
 test_array: test_array.lo libtinyafs.la
@@ -48,20 +49,24 @@ test_tinyafs: test_tinyafs.lo libtinyafs.la
 	$(LINK) $(LDFLAGS) $+ -o $@
 
 install:
-	mkdir -p $(DESTDIR)$(prefix)/$(libdir) $(DESTDIR)$(prefix)/include $(DESTDIR)$(prefix)/share/tinyafs
+	mkdir -p $(DESTDIR)$(prefix)/bin $(DESTDIR)$(prefix)/$(libdir) $(DESTDIR)$(prefix)/include $(DESTDIR)$(prefix)/share/man/man1 $(DESTDIR)$(prefix)/share/tinyafs
+	$(INSTALL) $(BINS) $(DESTDIR)$(prefix)/bin
 	$(INSTALL) libtinyafs.la $(DESTDIR)$(prefix)/$(libdir)
-	$(INSTALL) *.h $(DESTDIR)$(prefix)/include
-	$(INSTALL) *.sql post-import-points.pl refresh.sh $(DESTDIR)$(prefix)/share/tinyafs
+	$(INSTALL) -m 0644 *.h $(DESTDIR)$(prefix)/include
+	$(INSTALL) -m 0644 doc/*.1 $(DESTDIR)$(prefix)/share/man/man1
+	$(INSTALL) -m 0644 *.sql $(DESTDIR)$(prefix)/share/tinyafs
+	$(INSTALL) -m 0755 post-import-points.pl refresh.sh $(DESTDIR)$(prefix)/share/tinyafs
 
 clean:
-	rm -rfv *.o *.lo *.la .libs/ $(BINS)
+	rm -rfv *.o *.lo *.la .libs/ $(BINS) $(TESTS)
 	rm -fv *.gcno *.gcda gmon.out
 
 %.lo: %.c
 	$(COMPILE) -c $<
 
 array.lo: array.h
-scan.lo: browse.h tinyafs.h
+scan_mountpoints.lo: browse.h tinyafs.h
+scan_sql.lo: browse.h tinyafs.h
 test_browse.lo: browse.h
 test_tinyafs.lo: tinyafs.h
 tinyafs.lo: tinyafs.h
