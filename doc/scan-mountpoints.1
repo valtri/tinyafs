@@ -1,0 +1,32 @@
+.pc
+.TH SCAN-MOUNTPOINTS 1 "2014-05-17" 0.0.0 "TinyAFS"
+
+.SH NAME
+scan-mountpoints \- AFS volume scanner gathering mountpoints
+
+.SH SYNOPSIS
+\fBscan-mountpoints\fR [\fIOPTIONS\fR] \fIDIRECTORY\fR
+
+.SH DESCRIPTION
+\fBscan-mountpoints\fR gathers information about mountpoints on AFS subtree and prints them.
+
+The scan is performed inside the directory locally on the volume, not on the mounted volumes.
+
+.SH OPTIONS
+.TP
+\fB\-h,\fR \fB\-\-help\fR
+Print usage message.
+.TP
+\fB\-q,\fR \fB\-\-quiet\fR
+Do not print mountpoints.
+
+.SH EXIT STATUS
+.TP
+.B 0
+No mountpoints were found.
+.TP
+.B 1
+Some mountpoints were found.
+.TP
+.B 2
+Error during directory scan.

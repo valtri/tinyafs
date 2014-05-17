@@ -24,8 +24,6 @@ int action(const char *path, int level, void *user __attribute__((unused))) {
 	int retval;
 	char *volume = NULL;
 
-	printf("%d: %s\n", level, path);
-
 	if (level > 0) {
 		retval = list_mount(path, quiet ? NULL : &volume);
 		if (retval == 0) {
@@ -39,7 +37,7 @@ int action(const char *path, int level, void *user __attribute__((unused))) {
 			}
 		}
 		if (errno != EINVAL) {
-			/* set our errors flag, by try to continue */
+			/* set our errors flag, but try to continue */
 			fprintf(stderr, "%s\n", strerror(errno));
 			was_err = 1;
 		}
@@ -50,7 +48,12 @@ int action(const char *path, int level, void *user __attribute__((unused))) {
 
 
 static void usage(const char *prog) {
-	printf("Usage: %s DIRECTORY\n", prog);
+	printf("Usage: %s [OPTIONS] DIRECTORY\n\
+\n\
+OPTIONS are:\n\
+  -h, --help .... usage\n\
+  -q, --quiet ... do not print mountpoints\n\
+", prog);
 }
 
 
