@@ -166,7 +166,7 @@ static int read_config(const char *config_file) {
 		if ((strcmp(key, "host") == 0)) {
 			free(host);
 			host = value ? strdup(value) : NULL;
-		} else if ((strcmp(buf, "name") == 0)) {
+		} else if ((strcmp(buf, "database") == 0)) {
 			free(name);
 			name = value ? strdup(value) : NULL;
 		} if ((strcmp(buf, "user") == 0)) {
