@@ -8,10 +8,23 @@ my $dbuser = 'afs';
 my $pass = '';
 my $dbcs;
 
+my $root_dir;
+my $root_volume = 'root.cell';
+
 my ($dbh, $sti, $stu, $stufull, $sts);
-my ($mount, %mounts, $volume, $dir);
+my ($mount, %mounts, $volume, $dir, $root_dir_rel);
 my $count = -1;
 my $i = 0;
+
+if ($#ARGV + 1 < 1) {
+	print "Usage: $0 AFS_CELL_ROOT_DIRECTORY [AFS_ROOT_CELL_VOLUME]";
+	exit 1;
+}
+$root_dir = $ARGV[0];
+
+if ($#ARGV + 1 >= 2) {
+	$root_volume = $ARGV[1];
+}
 
 if (open FH, '<', 'pass') {
 	while (<FH>) {
@@ -34,10 +47,11 @@ $stu = $dbh->prepare("UPDATE mountpoints SET dir=? WHERE volume=?");
 $stufull = $dbh->prepare("UPDATE mountpoints SET dir=? WHERE volume=? AND pointvolume=? AND pointdir=?");
 $sts = $dbh->prepare("SELECT m1.volume volume, m1.pointvolume pointvolume, m1.pointdir pointdir, CONCAT(m2.dir, '/', m1.pointdir) dir FROM mountpoints m1, mountpoints m2 WHERE m1.pointvolume=m2.volume AND m2.dir IS NOT NULL AND m1.dir IS NULL");
 
-$dbh->do("DELETE FROM mountpoints WHERE volume='root.cell'");
-$sti->execute(undef, 'afs/zcu.cz', 'root.cell');
-$stu->execute('/afs/zcu.cz', 'root.cell');
-
+$root_dir_rel=$root_dir;
+$root_dir_rel=~s,^/*,,;
+$dbh->do("DELETE FROM mountpoints WHERE volume='".$root_volume."'");
+$sti->execute(undef, $root_dir_rel, $root_volume);
+$stu->execute($root_dir, $root_volume);
 
 while ($count != 0 and $i < 10) {
 	$count = 0;
