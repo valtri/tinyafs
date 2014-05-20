@@ -12,7 +12,7 @@ scan-sql \- AFS volumes scanner gathering data to SQL database
 .SH DESCRIPTION
 \fBscan-sql\fR gathers information about all mountpoints and ACL rights on AFS and stores them into SQL database.
 
-The scan is performed separately for each volume, so it is needed to specify all AFS volumes to scan by \fB\-l\fR|\fB\-\-list\fR option. Optionally you can specify mounpoints for some volumes. In case the mountpoint is not specified for a volume, it is temporarily mounted in helper service directory by \fBscan-sql\fR.
+The scan is performed separately for each volume, so it is needed to specify all AFS volumes to scan by \fB\-l\fR|\fB\-\-list\fR option. Optionally you can specify mounpoints for some volumes. In case the mountpoint is not specified for a volume, the volume is temporarily mounted in helper service directory.
 
 .SH OPTIONS
 .TP
