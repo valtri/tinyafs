@@ -1,4 +1,10 @@
 #! /usr/bin/perl -w
+#
+# Showing rights in form of commands clearing the rights.
+#
+# It tries to do some graph optimization: skips already cleared subtrees and
+# process all their siblings instead.
+#
 use strict;
 use DBI;
 

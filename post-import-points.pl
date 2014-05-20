@@ -1,4 +1,8 @@
 #! /usr/bin/perl -w
+#
+# Postprocess AFS scan. It generate all mountpoints for all volumes
+# ('dir' column of 'mountpoins' table and 'volumes' table).
+#
 use strict;
 use DBI;
 
