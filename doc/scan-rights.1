@@ -1,0 +1,37 @@
+.pc
+.TH SCAN-RIGHYRS 1 "2014-06-13" 0.0.0 "TinyAFS"
+
+.SH NAME
+scan-rights \- AFS volume scanner gathering ACLs
+
+.SH SYNOPSIS
+\fBscan-rights\fR [\fIOPTIONS\fR] \fIDIRECTORY\fR
+
+.SH DESCRIPTION
+\fBscan-rights\fR gathers information about rights of particular user on AFS subtree and prints them in the form of AFS commands.
+
+The scan is performed inside the directory locally on the volume, not on the mounted volumes.
+
+This utility can be useful when changing username.
+
+.SH OPTIONS
+.TP
+\fB\-h,\fR \fB\-\-help\fR
+Print usage message.
+.TP
+\fB\-u,\fR \fB\-\-user\fR
+Username to analyze.
+.TP
+\fB\-n,\fR \fB\-\-new-user\fR
+Username used in the ACL setting command (renamed user).
+
+.SH EXIT STATUS
+.TP
+.B 0
+No mountpoints were found.
+.TP
+.B 1
+Some mountpoints were found.
+.TP
+.B 2
+Error during directory scan.
