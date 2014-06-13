@@ -62,3 +62,8 @@ SELECT DISTINCT login FROM rights WHERE login LIKE '1%' OR login LIKE '2%' OR lo
 # table)
 #
 SELECT DISTINCT volume FROM rights WHERE volume NOT IN (SELECT volume FROM volumes);
+
+#
+# list of volumes without mountpoints, but without "subvolumes" mounted in them
+#
+SELECT DISTINCT pointvolume FROM mountpoints WHERE dir IS NULL AND pointvolume NOT IN (SELECT volume FROM mountpoints) ORDER BY 1;
