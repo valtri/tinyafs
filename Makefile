@@ -1,6 +1,6 @@
 -include Makefile.inc
 
-prefix=/usr
+prefix?=/usr
 libdir?=lib
 AFS_PREFIX?=/usr
 AFS_CPPFLAGS?=-I$(AFS_PREFIX)/include -DVENUS=1
