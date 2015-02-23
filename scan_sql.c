@@ -103,7 +103,7 @@ OPTIONS are:\n\
   -d, --dry-run .......... do not save to database\n\
   -h, --help ............. help message\n\
   -m, --max-depth=DEPTH .. maximal directory level to go into [%d]\n\
-  -n, --num-threads=N .... number of parallel threads [%d]\n\
+  -n, --num-threads=N .... number of parallel threads [%zu]\n\
   -s, --servicedir=DIR ... empty helper directory for mounting\n\
 ", program_name, max_depth, nthreads);
 }
@@ -583,14 +583,14 @@ int main(int argc, char *argv[]) {
 	for (i = 0; i < nthreads; i++) {
 		threads[i].id = i;
 		if (pthread_create(&threads[i].thread, NULL, browser_thread, threads + i) != 0) {
-			fprintf(stderr, "Error creating %d. thread: %s\n", i, strerror(errno));
+			fprintf(stderr, "Error creating %zu. thread: %s\n", i, strerror(errno));
 			goto err;
 		}
 	}
 	retval = EXIT_OK;
 	for (i = 0; i < nthreads; i++) {
 		if (pthread_join(threads[i].thread, NULL) != 0) {
-			fprintf(stderr, "Error can't join %d. thread: %s\n", i, strerror(errno));
+			fprintf(stderr, "Error can't join %zu. thread: %s\n", i, strerror(errno));
 			retval = EXIT_FATAL;
 		}
 		if (threads[i].was_err && retval != EXIT_FATAL) retval = EXIT_ERRORS;
