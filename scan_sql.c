@@ -31,7 +31,6 @@
 #define EXIT_ERRORS 1
 #define EXIT_FATAL 2
 
-#define COUNT_COMMIT 5000
 #define COUNT_PROGRESS 100000
 
 
@@ -47,6 +46,7 @@ typedef struct {
 	size_t basedir_len;
 	glite_lbu_DBContext db;
 	glite_lbu_Statement points_stmt, rights_stmt;
+	int connected;
 
 	int was_err;
 	size_t count;
@@ -275,7 +275,7 @@ static void print_DBError(glite_lbu_DBContext db) {
 }
 
 
-static void save_rights(ctx_t *ctx, const char *relpath, const struct AclEntry *entry, int negative) {
+static int save_rights(ctx_t *ctx, const char *relpath, const struct AclEntry *entry, int negative) {
 	char rights[MAXRIGHTS + 2];
 
 	if (negative) {
@@ -292,11 +292,14 @@ static void save_rights(ctx_t *ctx, const char *relpath, const struct AclEntry *
 	    ) != 1) {
 		print_DBError(ctx->db);
 		ctx->was_err = 1;
+		return glite_lbu_DBError(ctx->db, NULL, NULL);
 	}
+
+	return 0;
 }
 
 
-static void save_point(ctx_t *ctx, const char *relpath, const char *mount) {
+static int save_point(ctx_t *ctx, const char *relpath, const char *mount) {
 	const char *volname;
 	size_t len;
 
@@ -312,7 +315,10 @@ static void save_point(ctx_t *ctx, const char *relpath, const char *mount) {
 	    ) != 1) {
 		print_DBError(ctx->db);
 		ctx->was_err = 1;
+		return glite_lbu_DBError(ctx->db, NULL, NULL);
 	}
+
+	return 0;
 }
 
 
@@ -330,6 +336,13 @@ static int action(const char *path, int level, void *data) {
 	if (max_depth > 0 && level >= max_depth) {
 		fprintf(stderr, "level too high, skipping: %s:%s\n", ctx->volume, relpath);
 		return BROWSE_ACTION_SKIP;
+	}
+
+	if (!dry_run && !ctx->connected) {
+		if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
+		ctx->connected = 1;
+		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
+		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
 	}
 
 	if (list_mount(path, &mount) == 0) {
@@ -355,15 +368,16 @@ static int action(const char *path, int level, void *data) {
 	free_acl(&acl);
 
 	ctx->count++;
-	if (!dry_run && (ctx->count % COUNT_COMMIT) == 0) {
-		glite_lbu_Commit(ctx->db);
-		glite_lbu_Transaction(ctx->db);
-	}
 	if ((ctx->count % COUNT_PROGRESS) == 0) {
 		printf("[thread %d] %s: %zd dirs so far\n", ctx->id, ctx->volume, ctx->count);
 	}
 
 	return BROWSE_ACTION_OK;
+
+dberr:
+	print_DBError(ctx->db);
+	ctx->was_err = 1;
+	return BROWSE_ACTION_ABORT;
 }
 
 
@@ -432,7 +446,6 @@ static void return_volume(ctx_t *ctx) {
 
 void *browser_thread(void *data) {
 	ctx_t *ctx = (ctx_t *)data;
-	int connected = 0;
 	double duration, ratio;
 
 	printf("[thread %d] started\n", ctx->id);
@@ -442,11 +455,6 @@ void *browser_thread(void *data) {
 			fprintf(stderr, "DB module initialization failed\n\n");
 			return NULL;
 		}
-
-		if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
-		connected = 1;
-		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
-		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
 	}
 
 	do {
@@ -456,11 +464,7 @@ void *browser_thread(void *data) {
 		if (!ctx->volume) break;
 
 		gettimeofday(&ctx->begin, NULL);
-		if (!dry_run) glite_lbu_Transaction(ctx->db);
-
 		browse(ctx->basedir, action, ctx);
-
-		if (!dry_run) glite_lbu_Commit(ctx->db);
 		gettimeofday(&ctx->end, NULL);
 
 		duration = timeval2double(&ctx->end) - timeval2double(&ctx->begin);
@@ -479,13 +483,6 @@ void *browser_thread(void *data) {
 
 	printf("[thread] %d finished\n", ctx->id);
 
-	return NULL;
-dberr:
-	if (!dry_run) {
-		print_DBError(ctx->db);
-		if (connected) glite_lbu_DBClose(ctx->db);
-		glite_lbu_FreeDBContext(ctx->db);
-	}
 	return NULL;
 }
 
