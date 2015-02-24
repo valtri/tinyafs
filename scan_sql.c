@@ -267,9 +267,10 @@ static int read_list(const char *list_file) {
 
 static void print_DBError(glite_lbu_DBContext db) {
 	char *error, *desc;
+	int err;
 
-	glite_lbu_DBError(db, &error, &desc);
-	fprintf(stderr, "DB error: %s: %s\n", error, desc);
+	err = glite_lbu_DBError(db, &error, &desc);
+	fprintf(stderr, "DB error (%d): %s: %s\n", err, error, desc);
 	free(error);
 	free(desc);
 }
@@ -291,7 +292,6 @@ static int save_rights(ctx_t *ctx, const char *relpath, const struct AclEntry *e
 		GLITE_LBU_DB_TYPE_VARCHAR, rights
 	    ) != 1) {
 		print_DBError(ctx->db);
-		ctx->was_err = 1;
 		return glite_lbu_DBError(ctx->db, NULL, NULL);
 	}
 
@@ -314,11 +314,52 @@ static int save_point(ctx_t *ctx, const char *relpath, const char *mount) {
 		GLITE_LBU_DB_TYPE_VARCHAR, volname
 	    ) != 1) {
 		print_DBError(ctx->db);
-		ctx->was_err = 1;
 		return glite_lbu_DBError(ctx->db, NULL, NULL);
 	}
 
 	return 0;
+}
+
+
+static int dbconnect(ctx_t *ctx) {
+//fprintf(stderr, "[DB] connecting...\n");
+	if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
+//fprintf(stderr, "[DB] connected\n");
+	ctx->connected = 1;
+	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
+//fprintf(stderr, "[DB] stmt1\n");
+	if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
+//fprintf(stderr, "[DB] stmt2\n");
+
+	return 0;
+dberr:
+	return glite_lbu_DBError(ctx->db, NULL, NULL);
+}
+
+
+static void dbdisconnect(ctx_t *ctx) {
+	glite_lbu_FreeStmt(&ctx->points_stmt);
+	glite_lbu_FreeStmt(&ctx->rights_stmt);
+	glite_lbu_DBClose(ctx->db);
+//fprintf(stderr, "[DB] disconnected\n");
+	ctx->connected = 0;
+}
+
+
+static int dbretry(ctx_t *ctx, int status, const char *msg) {
+	int retry = 0;
+
+	while (status == EDEADLK || status == ENOTCONN || status == EIO) {
+		retry = 1;
+		fprintf(stderr, "%s, retrying in 1 sec...\n", msg);
+		dbdisconnect(ctx);
+		usleep(1000000L);
+		status = dbconnect(ctx);
+	}
+
+	if (status != 0) ctx->was_err = 1;
+
+	return retry;
 }
 
 
@@ -338,22 +379,24 @@ static int action(const char *path, int level, void *data) {
 		return BROWSE_ACTION_SKIP;
 	}
 
-	if (!dry_run && !ctx->connected) {
-		if (glite_lbu_DBConnect(ctx->db, dbcs) != 0) goto dberr;
-		ctx->connected = 1;
-		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO mountpoints (pointvolume, pointdir, volume) VALUES (?, ?, ?)", &ctx->points_stmt) != 0) goto dberr;
-		if (glite_lbu_PrepareStmt(ctx->db, "INSERT INTO rights (volume, dir, login, rights) VALUES (?, ?, ?, ?)", &ctx->rights_stmt) != 0) goto dberr;
-	}
+	if (!dry_run && !ctx->connected)
+		if (dbconnect(ctx) != 0) goto dberr;
 
 	if (list_mount(path, &mount) == 0) {
 		if (level != 0) {
 			printf("[thread %d] %s: (%s -> %s)\n", ctx->id, ctx->volume, relpath, mount);
-			if (!dry_run) save_point(ctx, relpath, mount);
+			if (!dry_run)
+				while (dbretry(ctx, save_point(ctx, relpath, mount), "DB lost during saving mointpoint"));
 			free(mount);
+			if (glite_lbu_DBError(ctx->db, NULL, NULL) != 0) goto dberr;
+
 			return BROWSE_ACTION_SKIP;
 		} else {
 			free(mount);
+			mount = NULL;
 		}
+	} else {
+		mount = NULL;
 	}
 
 	if (get_acl(path, &acl) != 0) {
@@ -362,8 +405,14 @@ static int action(const char *path, int level, void *data) {
 		return BROWSE_ACTION_OK;
 	}
 	if (!dry_run) {
-		for (i = 0; i < acl.nplus; i++) save_rights(ctx, relpath, acl.plus + i, 0);
-		for (i = 0; i < acl.nminus; i++) save_rights(ctx, relpath, acl.minus + i, 1);
+		for (i = 0; i < acl.nplus; i++) {
+			while (dbretry(ctx, save_rights(ctx, relpath, acl.plus + i, 0), "DB lost during saving ACLs"));
+			if (glite_lbu_DBError(ctx->db, NULL, NULL) != 0) goto dberr;
+		}
+		for (i = 0; i < acl.nminus; i++) {
+			while (dbretry(ctx, save_rights(ctx, relpath, acl.minus + i, 1), "DB lost during saving ACLs"));
+			if (glite_lbu_DBError(ctx->db, NULL, NULL) != 0) goto dberr;
+		}
 	}
 	free_acl(&acl);
 
@@ -447,6 +496,7 @@ static void return_volume(ctx_t *ctx) {
 void *browser_thread(void *data) {
 	ctx_t *ctx = (ctx_t *)data;
 	double duration, ratio;
+	int ret;
 
 	printf("[thread %d] started\n", ctx->id);
 
@@ -464,7 +514,7 @@ void *browser_thread(void *data) {
 		if (!ctx->volume) break;
 
 		gettimeofday(&ctx->begin, NULL);
-		browse(ctx->basedir, action, ctx);
+		ret = browse(ctx->basedir, action, ctx);
 		gettimeofday(&ctx->end, NULL);
 
 		duration = timeval2double(&ctx->end) - timeval2double(&ctx->begin);
@@ -472,12 +522,10 @@ void *browser_thread(void *data) {
 		printf("[thread %d] %s: %zd dirs, time %lf, ratio %lf dirs/s\n", ctx->id, ctx->volume, ctx->count, duration, ratio);
 
 		return_volume(ctx);
-	} while (ctx->volume && !quit);
+	} while (ctx->volume && !quit && (ret & BROWSE_ACTION_ABORT) == 0);
 
 	if (!dry_run) {
-		glite_lbu_FreeStmt(&ctx->points_stmt);
-		glite_lbu_FreeStmt(&ctx->rights_stmt);
-		glite_lbu_DBClose(ctx->db);
+		dbdisconnect(ctx);
 		glite_lbu_FreeDBContext(ctx->db);
 	}
 
