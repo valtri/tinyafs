@@ -10,11 +10,12 @@
 #
 # 2) list of volumes
 #
-# ./listvolumes.pl > volumes.txt
-# # remove .backup
-# # remove root.afs
+# PERL5LIB=tools tools/listvol.pl | egrep -v '(^root\.afs|\.backup$)' > volumes.txt
+#
 # # optionally add some mountpoints: %s,^user\.\(.\)\(.*\),user\.\1\2^I/afs/zcu.cz/users/\1/\1\2,
-# # check and correct all "volume_busy_"
+# sed -i volumes.txt -e 's,^\(user\.\(.\)\(.*\)\),\1\t/afs/zcu.cz/users/\2/\2\3,'
+#
+# # check and correct all busy volumes
 #
 # 3) run environment
 #    + system:administrators group
@@ -23,7 +24,6 @@
 # pagsh
 # screen
 # ./refresh.sh LOGIN/root
-#
 #
 # 4) scan
 #
