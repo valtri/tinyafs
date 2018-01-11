@@ -530,6 +530,7 @@ void *browser_thread(void *data) {
 	}
 
 	printf("[thread] %d finished\n", ctx->id);
+	fflush(stdout);
 
 	return NULL;
 }
@@ -643,6 +644,7 @@ int main(int argc, char *argv[]) {
 	gettimeofday(&end, NULL);
 	if (ivolume > 0) printf("[main] last volume: %s\n", volume_list[ivolume - 1].volume);
 	printf("[main] run duration: %lf\n", timeval2double(&end) - timeval2double(&begin));
+	fflush(stdout);
 	free(threads);
 
 err:
