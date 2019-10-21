@@ -21,7 +21,9 @@ my $count = -1;
 my $i = 0;
 
 if ($#ARGV + 1 < 1) {
-	print "Usage: $0 AFS_CELL_ROOT_DIRECTORY [AFS_ROOT_CELL_VOLUME]";
+	print "Usage: $0 AFS_CELL_ROOT_DIRECTORY [AFS_ROOT_CELL_VOLUME]\n";
+	print "\n";
+	print "Optionally 'volumes.txt' file is used.\n";
 	exit 1;
 }
 $root_dir = $ARGV[0];
@@ -84,5 +86,21 @@ $dbh->do("INSERT INTO volumes (volume, dir)
 			SELECT COUNT(*) FROM mountpoints m1
 			WHERE m1.volume = m.volume AND LENGTH(m1.dir) <= LENGTH(m.dir) AND m1.dir > m.dir
 		) <= 1");
+
+my $st_getvol = $dbh->prepare('SELECT * FROM volumes WHERE volume = ?');
+my $st_insvol = $dbh->prepare('INSERT INTO volumes (volume, dir) VALUES (?, NULL)');
+if (open(FH, '<', 'volumes.txt')) {
+	while (<FH>) {
+		chomp;
+		my @a = split /\s+/;
+		$st_getvol->execute($a[0]);
+		if (not $st_getvol->fetchrow_hashref()) {
+			$st_insvol->execute($a[0]);
+		}
+	}
+	close FH;
+} else {
+	print STDERR "Warning: volumes.txt file not found";
+}
 
 $dbh->disconnect;
