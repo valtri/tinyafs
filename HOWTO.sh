@@ -3,7 +3,7 @@
 #
 # 1) mysql setup
 #
-# CREATE DATABASE afs;
+# CREATE DATABASE afs CHARACTER SET utf8 DEFAULT CHARACTER SET utf8 COLLATE utf8_bin DEFAULT COLLATE utf8_bin;
 # GRANT ALL ON afs.* TO afs@localhost;
 # USE afs;
 # \. create.sql
