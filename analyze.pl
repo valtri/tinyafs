@@ -49,6 +49,7 @@ $dbcs = "dbi:mysql:database=$dbname;host=$dbhost";
 
 $dbh = DBI->connect($dbcs, $dbuser, $pass, {PrintError => 0, RaiseError => 0}) or die "Can't connect: $DBI::errstr\n";
 $dbh->{RaiseError} = 1;
+$dbh->do('SET NAMES \'UTF8\'');
 if ($login) {
 	$sthseed = $dbh->prepare("SELECT * FROM rights WHERE login = ? ORDER BY volume, dir");
 } else {
