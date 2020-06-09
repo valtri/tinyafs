@@ -51,13 +51,13 @@ $dbh = DBI->connect($dbcs, $dbuser, $pass, {PrintError => 0, RaiseError => 0}) o
 $dbh->{RaiseError} = 1;
 $dbh->do('SET NAMES \'UTF8\'');
 if ($login) {
-	$sthseed = $dbh->prepare("SELECT * FROM rights WHERE login = ? ORDER BY volume, dir");
+	$sthseed = $dbh->prepare("SELECT * FROM rights WHERE login LIKE ? ORDER BY volume, dir");
 } else {
 	# zatim nejde (v kódu napočítáme s víc loginama)
 	$sthseed = $dbh->prepare("SELECT * FROM rights WHERE login LIKE '0%' OR login LIKE '1%' OR login LIKE '2%' OR login LIKE '3%' OR login LIKE '4%' OR login LIKE '5%' OR login LIKE '6%' OR login LIKE '7%' OR login LIKE '8%' OR login LIKE '9%' ORDER BY volume, dir");
 }
 $sthsubtreelist = $dbh->prepare("SELECT DISTINCT dir FROM rights WHERE volume = ? AND dir LIKE ?");
-$sthdir = $dbh->prepare('SELECT * FROM rights WHERE volume = ? AND dir = ? AND login = ? AND rights = ?');
+$sthdir = $dbh->prepare('SELECT * FROM rights WHERE volume = ? AND dir = ? AND login LIKE ? AND rights = ?');
 $sthvolumes = $dbh->prepare('SELECT * FROM volumes');
 
 # seed
