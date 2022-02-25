@@ -1,7 +1,7 @@
 CREATE TABLE rights (
 	volume VARCHAR(64),
-	dir VARCHAR(256),
-	login VARCHAR(32),
+	dir VARBINARY(2048),
+	login VARCHAR(64),
 	rights VARCHAR(10),
 
 	INDEX(dir),
@@ -11,8 +11,8 @@ CREATE TABLE rights (
 
 CREATE TABLE mountpoints (
 	pointvolume VARCHAR(64),
-	pointdir VARCHAR(256),
-	dir VARCHAR(256),
+	pointdir VARBINARY(2048),
+	dir VARBINARY(2048),
 	volume VARCHAR(64),
 
 	INDEX(dir),
@@ -20,7 +20,7 @@ CREATE TABLE mountpoints (
 ) ENGINE='innodb' COLLATE 'utf8_bin';
 
 CREATE TABLE volumes (
-	dir VARCHAR(256),
+	dir VARBINARY(2048),
 	volume VARCHAR(64),
 
 	INDEX(dir),
