@@ -20,7 +20,7 @@ For *glite-lbjp-common-db*:
 
     git clone https://github.com/CESNET/glite-lb
     cd glite-lb
-    org .glite.lb/configure --prefix=/usr/local --root=/ --enable-db --with-postgresql=no
+    org.glite.lb/configure --prefix=/usr/local --root=/ --enable-db --with-postgresql=no
 
     # will do also installation
     su
