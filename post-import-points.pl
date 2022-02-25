@@ -58,6 +58,8 @@ $root_dir_rel=~s,^/*,,;
 $dbh->do("DELETE FROM mountpoints WHERE volume='".$root_volume."'");
 $sti->execute(undef, $root_dir_rel, $root_volume);
 $stu->execute($root_dir, $root_volume);
+$sti->finish();
+$stu->finish();
 
 while ($count != 0 and $i < 10) {
 	$count = 0;
@@ -102,5 +104,7 @@ if (open(FH, '<', 'volumes.txt')) {
 } else {
 	print STDERR "Warning: volumes.txt file not found";
 }
+$st_getvol->finish();
+$st_insvol->finish();
 
 $dbh->disconnect;
